@@ -18,3 +18,4 @@ Local: `cp .env.example .env.local && npm i && npm run dev`.
 
 ## Known limits
 No Double Ratchet yet: if a user's private key leaks, their stored history is readable (use disappearing messages). The server operator can still see who talks to whom and when.
+"# NexLink-Website" 
