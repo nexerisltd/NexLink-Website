@@ -2,12 +2,25 @@
 import {useEffect,useRef,useState,useCallback} from 'react';
 import {sb} from '../lib/supabase';
 import * as C from '../lib/crypto';
+import * as A from '../lib/archive';
+import * as D from '../lib/drive';
 
 const nm=p=>p?.display_name||'?';
 const hue=n=>[...(n||'?')].reduce((a,c)=>a+c.charCodeAt(0),0)*47%360;
 const Av=({n})=><div className="av" style={{background:`linear-gradient(135deg,hsl(${hue(n)} 80% 55%),hsl(${(hue(n)+50)%360} 75% 40%))`}}>{(n||'?')[0].toUpperCase()}</div>;
 const Brand=()=><span className="brand">NexLink<em>.Chat</em></span>;
 const GIcon=()=><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.2C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.6 5.9c4.4-4.1 7-10.1 7-17.6z"/><path fill="#FBBC05" d="M10.5 28.6c-.5-1.5-.8-3-.8-4.6s.3-3.1.8-4.6l-7.9-6.2C.9 16.4 0 20.1 0 24s.9 7.6 2.6 10.8l7.9-6.2z"/><path fill="#34A853" d="M24 48c6.5 0 12-2.1 16-5.8l-7.6-5.9c-2.1 1.4-4.9 2.3-8.4 2.3-6.3 0-11.600-4.100-13.500-9.800l-7.900 6.200C6.500 42.600 14.600 48 24 48z"/></svg>;
+const IC={plus:'M12 5v14M5 12h14',more:'more',send:'M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z',back:'M15 18l-6-6 6-6',timer:['M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16z','M12 9v4l2 2','M9 2h6'],moon:'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z',out:'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9',cloud:'M17.5 19H9a7 7 0 1 1 6.7-9h1.8a4.5 4.5 0 0 1 0 9z',users:'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8',shield:'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',copy:['M9 9h11v11H9z','M5 15V4h11']};
+const Ic=({d,s=20})=><svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d==='more'?<g fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></g>:[].concat(d).map((x,i)=><path key={i} d={x}/>)}</svg>;
+const URL_RE=/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"])/g;
+const Linkify=({text})=>text.split(URL_RE).map((p,i)=>i%2?<a key={i} href={p} target="_blank" rel="noopener noreferrer nofollow">{p}</a>:p);
+const keepable=c=>c.kind!=='temp'&&!c.ttl_hours;
+function Menu({items,label,icon}){
+  const [o,setO]=useState(false),r=useRef(null);
+  useEffect(()=>{if(!o)return;const f=e=>{if(!r.current?.contains(e.target))setO(false)};document.addEventListener('mousedown',f);return()=>document.removeEventListener('mousedown',f)},[o]);
+  return <div className="menu" ref={r}><button className="ic" aria-label={label} aria-expanded={o} onClick={()=>setO(!o)}><Ic d={icon||IC.more}/></button>
+    {o&&<div className="pop" role="menu">{items.filter(Boolean).map(it=><button key={it.t} role="menuitem" className={'mi'+(it.danger?' danger':'')} onClick={()=>{setO(false);it.f()}}><Ic d={it.i} s={18}/>{it.t}</button>)}</div>}</div>;
+}
 function toggleTheme(){const el=document.documentElement;const dark=(el.dataset.theme||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'))==='dark';const n=dark?'light':'dark';el.dataset.theme=n;try{localStorage.setItem('nl-theme',n)}catch{}}
 const Splash=({t})=><div className="center"><img className="pulse" src="/logo.png" width="96" height="96" alt=""/><p className="mute">{t||'Loading…'}</p></div>;
 
@@ -129,7 +142,8 @@ function Chat({me,priv,first}){
   const plain=useRef(new Map()),aidR=useRef(null),endR=useRef(null);
   aidR.current=aid;
   const [ver,setVer]=useState(0),[now,setNow]=useState(Date.now()),[unlock,setUnlock]=useState(''),[keyed,setKeyed]=useState(true);
-  const [tab,setTab]=useState('all'),[toast,setToast]=useState(''),taR=useRef(null);
+  const [tab,setTab]=useState('all'),[toast,setToast]=useState(''),taR=useRef(null),chatsR=useRef([]),[bp,setBp]=useState(''),[bm,setBm]=useState(''),[bb,setBb]=useState(false);
+  chatsR.current=chats;
   const flash=m=>{setToast(m);setTimeout(()=>setToast(''),3500)};
   useEffect(()=>{const n=Object.values(unread).reduce((a,b)=>a+b,0);document.title=(n?`(${n}) `:'')+'NexLink.Chat'},[unread]);
   useEffect(()=>{const f=e=>e.key==='Escape'&&setModal(null);window.addEventListener('keydown',f);return()=>window.removeEventListener('keydown',f)},[]);
@@ -165,6 +179,7 @@ function Chat({me,priv,first}){
     load();if(!live)return;
     const ch=sb.channel('cc')
       .on('postgres_changes',{event:'INSERT',schema:'public',table:'messages'},async({new:m})=>{
+        const ch0=chatsR.current.find(c=>c.id===m.chat_id);if(ch0&&keepable(ch0))A.put(me.id,[m]).catch(()=>{});
         const x=await dec(m);
         setMsgs(o=>o[m.chat_id]?{...o,[m.chat_id]:[...o[m.chat_id].filter(y=>y.id!==m.id),x]}:o);
         if(m.sender_id!==me.id&&(m.chat_id!==aidR.current||document.hidden)){
@@ -180,8 +195,10 @@ function Chat({me,priv,first}){
   useEffect(()=>{
     if(!aid||!live)return;let off=false;
     (async()=>{
-      const {data}=await sb.from('messages').select('*').eq('chat_id',aid).order('created_at',{ascending:false}).limit(80);
-      const x=await Promise.all((data||[]).reverse().map(dec));
+      const c=chatsR.current.find(x=>x.id===aid);let rows;
+      if(c&&keepable(c)){await syncChat(aid);rows=(await A.byChat(me.id,aid)).slice(-300)}
+      else{const {data}=await sb.from('messages').select('*').eq('chat_id',aid).order('created_at',{ascending:false}).limit(80);rows=(data||[]).reverse()}
+      const x=await Promise.all(rows.map(dec));
       if(!off)setMsgs(o=>({...o,[aid]:x}));
     })();
     return()=>{off=true};
@@ -223,6 +240,34 @@ function Chat({me,priv,first}){
     }catch(x){setTxt(t);flash(x.message)}
   }
   async function verify(){const o=other(cur);setModal({sn:await C.safety(me.public_key,o.public_key),n:nm(o)})}
+  async function syncChat(id){
+    let last=(await A.byChat(me.id,id)).pop()?.created_at;
+    for(;;){let q=sb.from('messages').select('*').eq('chat_id',id).order('created_at').limit(500);if(last)q=q.gt('created_at',last);
+      const {data}=await q;if(!data?.length)break;await A.put(me.id,data);last=data[data.length-1].created_at;if(data.length<500)break}
+  }
+  async function backup(){
+    if(!bp)return setBm('Enter your key passphrase first');
+    setBb(true);setBm('Collecting messages…');
+    try{
+      for(const c of chats.filter(keepable))await syncChat(c.id);
+      const rows=(await A.all(me.id)).map(({k,c,...m})=>m);
+      const blob=await C.sealBackup({v:1,at:Date.now(),rows},bp);
+      setBm('Waiting for Google…');await D.save(await D.token(),JSON.stringify(blob));
+      setBm(`Backed up ${rows.length} messages ✓`);
+    }catch(e){setBm(e.message||'Backup failed')}
+    setBb(false);
+  }
+  async function restore(){
+    if(!bp)return setBm('Enter your key passphrase first');
+    setBb(true);setBm('Waiting for Google…');
+    try{
+      const txt=await D.load(await D.token());
+      if(!txt)throw new Error('No backup found in this Google account');
+      let o;try{o=await C.openBackup(JSON.parse(txt),bp)}catch{throw new Error('Wrong passphrase, or the backup is damaged')}
+      await A.put(me.id,o.rows);plain.current.clear();setVer(v=>v+1);setBm(`Restored ${o.rows.length} messages ✓`);
+    }catch(e){setBm(e.message||'Restore failed')}
+    setBb(false);
+  }
   async function unlockRoom(ev){
     ev.preventDefault();const k=await C.tempKeys(cur.code,unlock);
     const {data,error}=await sb.rpc('join_temp',{c:cur.code,v:k.verifier});
@@ -231,14 +276,12 @@ function Chat({me,priv,first}){
   }
   async function leave(){if(!confirm('Leave this group?'))return;await sb.rpc('leave_chat',{c:cur.id});setAid(null);setSide(true);load()}
 
-  const shown=cur?(msgs[cur.id]||[]).filter(m=>new Date(m.expires_at)>Date.now()):[];
+  const shown=cur?(msgs[cur.id]||[]).filter(m=>keepable(cur)||new Date(m.expires_at)>Date.now()):[];
   return <div className={'app'+(side?' open':'')}>
     <aside>
       <header><img src="/logo.png" width="36" height="36" alt=""/><div className="grow"><Brand/></div><span className={'dot'+(live?' on':'')} title={live?'Live':'Paused to save free quota'}/>
-        {!me.is_guest&&<button className="ic" title="New group" onClick={()=>setModal('g')}>＋</button>}
-        <button className="ic" aria-label="Toggle theme" title="Theme" onClick={toggleTheme}>◐</button>
-        <button className="ic" aria-label="Temporary room" title="Temporary room" onClick={()=>setModal('t')}>⏱</button>
-        <button className="ic" title="Sign out" onClick={()=>(!me.is_guest||confirm('Guest accounts cannot sign back in. Leave anyway?'))&&sb.auth.signOut()}>⎋</button></header>
+        <Menu label="New" icon={IC.plus} items={[!me.is_guest&&{t:'New group',i:IC.users,f:()=>setModal('g')},{t:'Temporary room',i:IC.timer,f:()=>setModal('t')}]}/>
+        <Menu label="Menu" items={[{t:'Switch theme',i:IC.moon,f:toggleTheme},!me.is_guest&&{t:'Back up to Google Drive',i:IC.cloud,f:()=>{setBm('');setModal('b')}},{t:'Sign out',i:IC.out,danger:true,f:()=>(!me.is_guest||confirm('Guest accounts cannot sign back in. Leave anyway?'))&&sb.auth.signOut()}]}/></header>
       <div className="who">{nm(me)} · @{me.username}</div>
       {!me.is_guest&&<input className="search" placeholder="Find people by username" value={q} onChange={e=>setQ(e.target.value)}/>}
       <div className="chips">{[['all','All'],['dm','People'],['group','Groups'],['temp','Temp']].map(([k,l])=><button key={k} className={'chip'+(tab===k?' on':'')} onClick={()=>setTab(k)}>{l}</button>)}</div>
@@ -251,13 +294,9 @@ function Chat({me,priv,first}){
       </div>
     </aside>
     <main>{cur?<>
-      <header><button className="ic back" onClick={()=>setSide(true)}>←</button>
-        <div className="grow"><b>{title(cur)}</b><span className={'mute'+(cur.kind==='temp'&&new Date(cur.expires_at)-now<600000?' warn':'')}>{cur.kind==='temp'?`Code ${cur.code.slice(0,4)}-${cur.code.slice(4)} · ${left(cur)} · ${(mem[cur.id]||[]).length} people`:`${(mem[cur.id]||[]).length} members`}</span></div>
-        {cur.kind!=='temp'&&<select value={cur.ttl_hours} title="Disappearing messages" onChange={e=>sb.rpc('set_ttl',{c:cur.id,h:+e.target.value}).then(load)}>
-          <option value="0">Keep 60 days</option><option value="1">1 hour</option><option value="24">1 day</option><option value="168">7 days</option></select>}
-        {cur.kind==='temp'&&<button className="ic" aria-label="Copy invite" title="Copy invite" onClick={()=>{navigator.clipboard?.writeText(`Join my NexLink.Chat temp room\nCode: ${cur.code.slice(0,4)}-${cur.code.slice(4)}\n${location.origin}\n(Ask me for the password)`);flash('Invite copied')}}>📋</button>}
-        {cur.kind==='dm'?<button className="ic" title="Verify safety number" onClick={verify}>🔒</button>:<button className="ic" title="Leave group" onClick={leave}>⎋</button>}
-      </header>
+      <header><button className="ic back" aria-label="Back" onClick={()=>setSide(true)}><Ic d={IC.back}/></button><Av n={title(cur)}/>
+        <div className="grow"><b>{title(cur)}</b><span className={'mute'+(cur.kind==='temp'&&new Date(cur.expires_at)-now<600000?' warn':'')}>{cur.kind==='temp'?`Code ${cur.code.slice(0,4)}-${cur.code.slice(4)} · ${left(cur)} · ${(mem[cur.id]||[]).length} people`:cur.kind==='dm'?'End-to-end encrypted':`${(mem[cur.id]||[]).length} members`}</span></div>
+        <Menu label="Chat options" items={[cur.kind==='temp'&&{t:'Copy invite',i:IC.copy,f:()=>{navigator.clipboard?.writeText(`Join my NexLink.Chat temp room\nCode: ${cur.code.slice(0,4)}-${cur.code.slice(4)}\n${location.origin}\n(Ask me for the password)`);flash('Invite copied')}},cur.kind!=='temp'&&{t:'Disappearing messages',i:IC.timer,f:()=>setModal('d')},cur.kind==='dm'&&{t:'Verify safety number',i:IC.shield,f:verify},cur.kind!=='dm'&&{t:cur.kind==='temp'?'Leave room':'Leave group',i:IC.out,danger:true,f:leave}]}/></header>
       <div className="msgs">
         {!shown.length&&<p className="mute" style={{margin:'auto'}}>No messages yet. Say hello.</p>}
         {shown.map((m,i)=>{const pv=shown[i-1],d=new Date(m.created_at),head=!pv||pv.sender_id!==m.sender_id||d-new Date(pv.created_at)>300000,newDay=!pv||new Date(pv.created_at).toDateString()!==d.toDateString(),mine=m.sender_id===me.id;
@@ -265,12 +304,22 @@ function Chat({me,priv,first}){
             {newDay&&<div className="day">{d.toLocaleDateString([],{weekday:'short',day:'numeric',month:'short'})}</div>}
             <div className={'b'+(mine?' me':'')+(head?' first':'')}>
               {cur.kind!=='dm'&&!mine&&head&&<i style={{color:`hsl(${hue(m.sender_id)} 85% 70%)`}}>{nm((mem[cur.id]||[]).find(p=>p.id===m.sender_id))}</i>}
-              {m.p?m.p.text:<em>Can’t decrypt on this device</em>}
+              {m.p?<Linkify text={m.p.text}/>:<em>Can’t decrypt on this device</em>}
               <time>{d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</time></div></div>})}
         <div ref={endR}/>
       </div>
-      {cur.kind==='temp'&&!keyed?<form className="send" onSubmit={unlockRoom}><input type="password" required value={unlock} onChange={e=>setUnlock(e.target.value)} placeholder="Room password to unlock"/><button>Unlock</button></form>:<form className="send" onSubmit={send}><textarea ref={taR} rows={1} value={txt} aria-label="Message" placeholder="Write a message" maxLength={4000} onChange={e=>setTxt(e.target.value)} onInput={e=>{e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,140)+'px'}} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();send(e)}}}/><button aria-label="Send" disabled={!txt.trim()}>➤</button></form>}
+      {cur.kind==='temp'&&!keyed?<form className="send" onSubmit={unlockRoom}><input type="password" required value={unlock} onChange={e=>setUnlock(e.target.value)} placeholder="Room password to unlock"/><button>Unlock</button></form>:<form className="send" onSubmit={send}><textarea ref={taR} rows={1} value={txt} aria-label="Message" placeholder="Write a message" maxLength={4000} onChange={e=>setTxt(e.target.value)} onInput={e=>{e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,140)+'px'}} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();send(e)}}}/><button aria-label="Send" disabled={!txt.trim()}><Ic d={IC.send}/></button></form>}
     </>:<div className="center"><img className="pulse" src="/logo.png" width="120" height="120" alt=""/><h2><Brand/></h2><p className="mute">Pick a chat, or start something new.</p>{!me.is_guest&&<button className="wide" onClick={()=>setModal('g')}>＋ New group</button>}<button className="wide alt" onClick={()=>setModal('t')}>⏱ Temporary room</button></div>}</main>
+    {modal==='b'&&<div className="modal" onClick={()=>setModal(null)}><div className="card" onClick={e=>e.stopPropagation()}>
+      <b>Back up to Google Drive</b>
+      <p className="mute">Saves your chat history in a hidden app folder of your Google Drive, encrypted with your key passphrase. Google cannot read it, and you can restore it on any device.</p>
+      {D.configured?<><input type="password" autoComplete="off" placeholder="Your key passphrase" value={bp} onChange={e=>setBp(e.target.value)}/>
+      <button disabled={bb} onClick={backup}>Back up now</button><button className="alt" disabled={bb} onClick={restore}>Restore from backup</button></>:<p className="err">Backup is not set up yet. Add NEXT_PUBLIC_GOOGLE_CLIENT_ID in Vercel.</p>}
+      {bm&&<p className="mute" role="status">{bm}</p>}</div></div>}
+    {modal==='d'&&cur&&<div className="modal" onClick={()=>setModal(null)}><div className="card" onClick={e=>e.stopPropagation()}>
+      <b>Disappearing messages</b>
+      <p className="mute">Keep history: messages stay on your devices and backup (the server keeps only a short cache). Timed options delete messages everywhere when time is up.</p>
+      {[[0,'Keep history'],[1,'1 hour'],[24,'1 day'],[168,'7 days']].map(([h,l])=><button key={h} className={cur.ttl_hours===h?'':'alt'} onClick={async()=>{const {error}=await sb.rpc('set_ttl',{c:cur.id,h});if(error)return flash(error.message);await load();setModal(null);flash('Updated')}}>{l}</button>)}</div></div>}
     {modal==='t'&&<div className="modal" onClick={()=>setModal(null)}><div style={{width:'min(380px,100%)'}} onClick={e=>e.stopPropagation()}><TempForm onCancel={()=>setModal(null)} onDone={async id=>{setModal(null);await load();open(id)}}/></div></div>}
     {modal==='g'&&<div className="modal" onClick={()=>setModal(null)}><form className="card" onClick={e=>e.stopPropagation()} onSubmit={group}>
       <b>New group</b><input name="t" required maxLength={60} placeholder="Group name"/><input name="u" required placeholder="Usernames, separated by commas"/>
