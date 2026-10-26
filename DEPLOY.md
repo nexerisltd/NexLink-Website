@@ -38,3 +38,6 @@ Leave all `R2_*` variables unset. The app then stores encrypted files in Supabas
 4. CORS: the web UI presets only allow downloads, not uploads. Run `scripts/b2-cors.mjs` once with your MASTER application key (instructions at the top of the file).
 5. Bucket Settings > Lifecycle Settings > custom rule: days till hide = 8, days till delete = 1 (B2 only hides on delete, this frees the space).
 6. Vercel env: `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID` (= keyID), `S3_SECRET_ACCESS_KEY` (= applicationKey), plus `SUPABASE_SERVICE_ROLE_KEY` and `CRON_SECRET`. Redeploy.
+
+## Troubleshooting storage
+Open `https://YOUR-APP.vercel.app/api/storage-check?secret=YOUR_CRON_SECRET`. `sdkPut` tests the keys, `presignedPut` tests the exact link the browser uses. If `presignedPut` fails but `sdkPut` is ok, set `S3_SIGN_LENGTH=0` in Vercel and redeploy.
