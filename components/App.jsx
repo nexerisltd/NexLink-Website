@@ -268,11 +268,17 @@ function Chat({me,priv,first}){
     if(!bk.pass)return upd({msg:'Enter your key passphrase first'});
     upd({busy:true,msg:'Waiting for Google…'});
     try{
-      const tok=await D.token(),txt=await D.load(tok);let key,kw;
-      if(txt){const f=JSON.parse(txt);let o;
-        try{key=await C.openBackupKey(f.kw,bk.pass);o=await C.decWith(key,f)}catch{throw new Error('Wrong passphrase, or the backup is damaged')}
-        kw=f.kw;await A.put(me.id,o.rows);plain.current.clear();setVer(v=>v+1)}
-      else{({key,kw}=await C.makeBackupKey(bk.pass))}
+      // the passphrase must match the account's key passphrase before any backup is created or opened
+      const {data:kb,error:ke}=await sb.from('key_backups').select('data').eq('user_id',me.id).single();
+      if(ke)throw ke;
+      try{await C.openBackup(kb.data,bk.pass)}catch{throw new Error('Wrong passphrase. Use the key passphrase you chose at setup.')}
+      const tok=await D.token(),txt=await D.load(tok);let key=null,kw=null,o=null;
+      if(txt){try{const f=JSON.parse(txt);key=await C.openBackupKey(f.kw,bk.pass);o=await C.decWith(key,f);kw=f.kw}catch{o=null}}
+      if(o){await A.put(me.id,o.rows);plain.current.clear();setVer(v=>v+1)}
+      else{
+        if(txt&&!confirm('The backup already in your Google Drive cannot be opened with this passphrase. Replace it with a fresh backup from this device?'))throw new Error('Cancelled');
+        ({key,kw}=await C.makeBackupKey(bk.pass));
+      }
       await C.saveKey('bk:'+me.id,key);LS('nl-kw:'+me.id,JSON.stringify(kw));LS('nl-auto:'+me.id,'1');
       const n=await pushBackup(tok);upd({auto:true,pass:'',msg:`Auto-backup is on. ${n} messages saved ✓`});
     }catch(e){upd({msg:e.message||'Failed'})}
