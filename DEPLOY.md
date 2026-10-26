@@ -35,6 +35,6 @@ Leave all `R2_*` variables unset. The app then stores encrypted files in Supabas
 1. Buckets > Create a Bucket: unique name, **Private**, default encryption off, Object Lock off.
 2. Note the bucket **Endpoint** (e.g. `s3.us-west-004.backblazeb2.com`). Region = the part after `s3.` (`us-west-004`).
 3. Application Keys > Add a New Application Key: only this bucket, **Read and Write**. Copy keyID + applicationKey (shown once). Never use the master key.
-4. Bucket Settings > CORS Rules: share with your Vercel origin (or every origin; files are private + encrypted), apply to the **S3-compatible API**. If the UI is not enough, run `scripts/set-cors.mjs`.
+4. CORS: the web UI presets only allow downloads, not uploads. Run `scripts/b2-cors.mjs` once with your MASTER application key (instructions at the top of the file).
 5. Bucket Settings > Lifecycle Settings > custom rule: days till hide = 8, days till delete = 1 (B2 only hides on delete, this frees the space).
 6. Vercel env: `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID` (= keyID), `S3_SECRET_ACCESS_KEY` (= applicationKey), plus `SUPABASE_SERVICE_ROLE_KEY` and `CRON_SECRET`. Redeploy.
