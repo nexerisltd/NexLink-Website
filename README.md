@@ -26,3 +26,9 @@ No Double Ratchet yet: if a user's private key leaks, their stored history is re
 - Messages are kept on each device (IndexedDB, still encrypted). The server only keeps a rolling cache: 60 days by default. Change it with `update public.app_settings set val='180' where key='retention_days';` (watch the 500 MB free database). Run `supabase/migration-v2.sql` once.
 - Timed chats and temp rooms are never stored locally and disappear everywhere when time is up.
 - Drive backup: Google Cloud Console > enable **Google Drive API**; OAuth consent screen > add scope `.../auth/drive.appdata`; OAuth client > add your Vercel URL under Authorized JavaScript origins; add `NEXT_PUBLIC_GOOGLE_CLIENT_ID` (same client ID you gave Supabase) in Vercel and redeploy.
+
+## v3: auto-backup, files, photos
+- Run `supabase/migration-v3.sql` once. It adds profile/group photos, the private `files` bucket (10 MB per file, any format, files are encrypted in the browser) and a 30 files/day/user limit.
+- Vercel env vars (server only, NOT `NEXT_PUBLIC_`): `SUPABASE_SERVICE_ROLE_KEY` and `CRON_SECRET`. The daily cron deletes expired files from Storage.
+- Auto-backup runs about once a day while the app is open (browsers cannot run in the background). First time: Settings > Google Drive backup > enter key passphrase.
+- Profile and group photos are small public-style images (not end-to-end encrypted).
