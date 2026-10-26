@@ -27,3 +27,14 @@ Deploy. Use ONE domain only (keys live per domain in the browser).
 
 ## 5. Test
 Two accounts: send a text, a photo and a PDF; check `messages` holds only ciphertext and R2 holds unreadable blobs; create a temp room; wait for the daily cron or open `/api/keepalive`.
+
+## No credit card? Skip section 3 (R2)
+Leave all `R2_*` variables unset. The app then stores encrypted files in Supabase Storage automatically (max 20 MB per file, 1 GB total, files expire after 7 days). Run `supabase/migration-v5.sql` and make sure `SUPABASE_SERVICE_ROLE_KEY` is set in Vercel. When you get a card later, add the 4 `R2_*` variables, redeploy, and new uploads go to R2 (old files stay where they are until they expire).
+
+## Backblaze B2 (free 10 GB, no card) instead of R2
+1. Buckets > Create a Bucket: unique name, **Private**, default encryption off, Object Lock off.
+2. Note the bucket **Endpoint** (e.g. `s3.us-west-004.backblazeb2.com`). Region = the part after `s3.` (`us-west-004`).
+3. Application Keys > Add a New Application Key: only this bucket, **Read and Write**. Copy keyID + applicationKey (shown once). Never use the master key.
+4. Bucket Settings > CORS Rules: share with your Vercel origin (or every origin; files are private + encrypted), apply to the **S3-compatible API**. If the UI is not enough, run `scripts/set-cors.mjs`.
+5. Bucket Settings > Lifecycle Settings > custom rule: days till hide = 8, days till delete = 1 (B2 only hides on delete, this frees the space).
+6. Vercel env: `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID` (= keyID), `S3_SECRET_ACCESS_KEY` (= applicationKey), plus `SUPABASE_SERVICE_ROLE_KEY` and `CRON_SECRET`. Redeploy.

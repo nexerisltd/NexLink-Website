@@ -327,9 +327,10 @@ function Chat({me,priv,first}){
     try{
       f=await shrink(f);if(f.size>MAXF)return flash('Max file size is 100 MB');
       flash('Encrypting and uploading…');
+      const {key:path,url,token}=await api('/api/files/upload',{chatId:cur.id,size:f.size+16});
       const e=await C.encryptFile(await f.arrayBuffer());
-      const {key:path,url}=await api('/api/files/upload',{chatId:cur.id,size:e.ct.byteLength});
-      const up=await fetch(url,{method:'PUT',body:new Blob([e.ct])});if(!up.ok)throw new Error('Upload failed. Check the R2 bucket CORS settings.');
+      if(token){const {error}=await sb.storage.from('files').uploadToSignedUrl(path,token,new Blob([e.ct]));if(error)throw error}
+      else{const up=await fetch(url,{method:'PUT',body:new Blob([e.ct])});if(!up.ok)throw new Error('Upload failed. Check the bucket CORS settings.')}
       await post({t:'file',name:f.name,mime:f.type,size:f.size,path,k:e.k,iv:e.iv},path);setToast('');
     }catch(x){flash(x.message||'Upload failed')}
   }
