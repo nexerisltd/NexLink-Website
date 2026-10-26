@@ -138,7 +138,7 @@ function TempForm({needNick,onDone,onCancel}){
 
 Object.assign(IC,{file:['M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z','M14 2v6h6'],clip:'M21.4 11.1l-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5',smile:['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z','M8 14s1.5 2 4 2 4-2 4-2','M9 9h.01M15 9h.01'],chat:'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z',sliders:'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6',camera:['M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z','M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z']});
 const EMOJI=['😀','😂','😍','🥰','😎','🤔','👍','🙏','🔥','🎉','❤️','😢','😮','😡','🙌','👏','✨','💯','🚀','✅','👀','🤝','💬','🔒'];
-const MAXF=10*1024*1024,fsz=n=>n<1024?n+' B':n<1048576?(n/1024).toFixed(0)+' KB':(n/1048576).toFixed(1)+' MB';
+const MAXF=100*1024*1024,fsz=n=>n<1024?n+' B':n<1048576?(n/1024).toFixed(0)+' KB':(n/1048576).toFixed(1)+' MB';
 const LS=(k,v)=>{try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch{}return null};
 const ago=iso=>{const d=new Date(iso),t=new Date();return d.toDateString()===t.toDateString()?d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):t-d<6048e5?d.toLocaleDateString([],{weekday:'short'}):d.toLocaleDateString([],{day:'numeric',month:'short'})};
 async function squarePic(file){const b=await createImageBitmap(file),s=Math.min(b.width,b.height),cv=document.createElement('canvas');cv.width=cv.height=128;cv.getContext('2d').drawImage(b,(b.width-s)/2,(b.height-s)/2,s,s,0,0,128,128);return cv.toDataURL('image/jpeg',.8)}
@@ -149,6 +149,11 @@ async function shrink(f){
   const o=await new Promise(r=>cv.toBlob(r,'image/jpeg',.82));
   return o&&o.size<f.size?new File([o],f.name.replace(/\.\w+$/,'')+'.jpg',{type:'image/jpeg'}):f;
 }
+async function api(path,body){
+  const {data:{session}}=await sb.auth.getSession();
+  const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${session?.access_token}`},body:JSON.stringify(body)});
+  const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||'Request failed');return j;
+}
 const blobs=new Map();
 function FileMsg({p}){
   const [u,setU]=useState(blobs.get(p.path)||null),[err,setErr]=useState(''),[bz,setBz]=useState(false);
@@ -156,8 +161,8 @@ function FileMsg({p}){
   const get=useCallback(async()=>{
     if(blobs.has(p.path))return blobs.get(p.path);
     setBz(true);
-    try{const {data,error}=await sb.storage.from('files').download(p.path);if(error)throw error;
-      const url=URL.createObjectURL(new Blob([await C.decryptFile(await data.arrayBuffer(),p.k,p.iv)],{type:isImg?p.mime:'application/octet-stream'}));
+    try{const {url:dl}=await api('/api/files/download',{key:p.path});const res=await fetch(dl);if(!res.ok)throw new Error('gone');
+      const url=URL.createObjectURL(new Blob([await C.decryptFile(await res.arrayBuffer(),p.k,p.iv)],{type:isImg?p.mime:'application/octet-stream'}));
       blobs.set(p.path,url);setU(url);return url}
     catch{setErr('File expired or unavailable');return null}
     finally{setBz(false)}
@@ -320,10 +325,11 @@ function Chat({me,priv,first}){
   async function sendFile(f){
     if(!f||!cur)return;
     try{
-      f=await shrink(f);if(f.size>MAXF)return flash('Max file size is 10 MB');
+      f=await shrink(f);if(f.size>MAXF)return flash('Max file size is 100 MB');
       flash('Encrypting and uploading…');
-      const e=await C.encryptFile(await f.arrayBuffer()),path=`${cur.id}/${crypto.randomUUID()}`;
-      const {error}=await sb.storage.from('files').upload(path,new Blob([e.ct]),{contentType:'application/octet-stream'});if(error)throw error;
+      const e=await C.encryptFile(await f.arrayBuffer());
+      const {key:path,url}=await api('/api/files/upload',{chatId:cur.id,size:e.ct.byteLength});
+      const up=await fetch(url,{method:'PUT',body:new Blob([e.ct])});if(!up.ok)throw new Error('Upload failed. Check the R2 bucket CORS settings.');
       await post({t:'file',name:f.name,mime:f.type,size:f.size,path,k:e.k,iv:e.iv},path);setToast('');
     }catch(x){flash(x.message||'Upload failed')}
   }
