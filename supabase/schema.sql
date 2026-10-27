@@ -206,3 +206,9 @@ create or replace function public.rename_chat(c uuid,t text) returns void langua
 begin
   if not public.chat_admin(c) then raise exception 'Only the group admin can rename the group'; end if;
   update chats set title=left(t,60) where id=c and kind='group'; end $$;
+-- Background push notifications. Run once.
+create table if not exists public.push_subs(id uuid primary key default gen_random_uuid(), user_id uuid not null references public.profiles on delete cascade,
+  endpoint text unique not null, sub jsonb not null, muted jsonb not null default '[]', created_at timestamptz default now());
+alter table public.push_subs enable row level security;
+drop policy if exists ps_own on public.push_subs;
+create policy ps_own on public.push_subs for all to authenticated using(user_id=auth.uid()) with check(user_id=auth.uid());

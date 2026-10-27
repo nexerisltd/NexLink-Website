@@ -96,3 +96,6 @@ code{font-size:17px;line-height:1.8;letter-spacing:.04em;word-spacing:8px;backgr
 .inl{display:flex;gap:8px}.inl button{width:auto}
 .sm{width:auto!important;padding:4px 10px!important;font-size:12px!important}
 .lbimg{max-width:96vw;max-height:92vh;border-radius:12px;box-shadow:var(--shadow)}
+.chipsr{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.rx{width:auto;padding:1px 8px;font-size:12px;background:rgba(127,150,210,.25);color:inherit;border-radius:99px}.rx.mine{outline:1px solid var(--acc)}
+.edited{opacity:.6;font-size:11px}.acts{flex-wrap:wrap}

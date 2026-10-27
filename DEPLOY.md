@@ -44,3 +44,8 @@ Open `https://YOUR-APP.vercel.app/api/storage-check?secret=YOUR_CRON_SECRET`. `s
 
 ## v6 (replies, delete, group management)
 Run `supabase/migration-v6.sql` once in the SQL Editor (adds add_member / remove_member / rename_chat).
+
+## v7 (reactions, edit, pin/mute, background push)
+1. Run `supabase/migration-v7.sql` once.
+2. Generate push keys on your PC: `npx web-push generate-vapid-keys`. Add to Vercel: `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (public key), `VAPID_PRIVATE_KEY` (private key, server only), `VAPID_SUBJECT` (`mailto:your@email`). Redeploy.
+3. In the app: Settings > Turn on background notifications (per device). On iPhone the app must be added to the Home Screen first.
