@@ -99,3 +99,20 @@ code{font-size:17px;line-height:1.8;letter-spacing:.04em;word-spacing:8px;backgr
 .chipsr{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
 .rx{width:auto;padding:1px 8px;font-size:12px;background:rgba(127,150,210,.25);color:inherit;border-radius:99px}.rx.mine{outline:1px solid var(--acc)}
 .edited{opacity:.6;font-size:11px}.acts{flex-wrap:wrap}
+.b.me{background:linear-gradient(135deg,var(--acc),var(--acc2))}
+.mrow{display:flex;gap:8px;align-items:flex-end;max-width:100%}
+.mrow.mine{align-self:flex-end;flex-direction:row-reverse}
+.mrow .b{align-self:auto}
+.mrow .av,.avs{width:34px;height:34px;font-size:13px;flex:none}
+.b.pending{opacity:.65}
+.jump{position:absolute;right:24px;bottom:104px;width:42px!important;height:42px;padding:0!important;border-radius:50%;box-shadow:var(--shadow);font-size:18px}
+.empty{display:grid;justify-items:center;gap:10px;padding:28px 16px;text-align:center}.empty img{border-radius:18px}
+.row.skel{cursor:default}.sk{background:var(--rowon);animation:shim 1.2s infinite}
+.skl{height:12px;border-radius:6px;background:var(--rowon);margin:6px 0;animation:shim 1.2s infinite}.w60{width:60%}.w40{width:40%}
+@keyframes shim{50%{opacity:.45}}
+.newdiv{display:flex;align-items:center;gap:10px;color:var(--acc);font-size:12px;font-weight:600;margin:10px 0 4px}
+.newdiv:before,.newdiv:after{content:"";flex:1;border-top:1px solid var(--acc);opacity:.4}
+.toast.bad{border-color:#e5484d}
+.swatches{display:flex;gap:10px}.sw{width:30px!important;height:30px;padding:0!important;border-radius:50%}
+@media(prefers-reduced-motion:no-preference){.modal{animation:fade .15s}.card{animation:rise .18s ease-out}@keyframes fade{from{opacity:0}}@keyframes rise{from{opacity:0;transform:translateY(8px) scale(.98)}}}
+@media(max-width:760px){.app{grid-template-rows:minmax(0,1fr) auto}.rail{display:flex;order:2;flex-direction:row;justify-content:space-around;padding:4px 6px calc(4px + env(safe-area-inset-bottom));border-right:0;border-top:1px solid var(--line);background:var(--panel)}.rail img,.rail .grow{display:none}.rb{width:auto;flex:1}.app:not(.open) .rail{display:none}.jump{bottom:92px}}

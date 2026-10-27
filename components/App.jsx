@@ -28,7 +28,7 @@ const Splash=({t})=><div className="center"><img className="pulse" src="/logo.pn
 
 export default function App(){
   const [s,setS]=useState(undefined);
-  useEffect(()=>{try{const t=localStorage.getItem('nl-theme');if(t)document.documentElement.dataset.theme=t}catch{}},[]);
+  useEffect(()=>{try{const t=localStorage.getItem('nl-theme');if(t)document.documentElement.dataset.theme=t;applyAccent(+localStorage.getItem('nl-accent')||0)}catch{}},[]);
   useEffect(()=>{
     sb.auth.getSession().then(({data})=>setS(data.session));
     const {data}=sb.auth.onAuthStateChange((_e,x)=>setS(x));
@@ -177,14 +177,16 @@ function FileMsg({p}){
 }
 
 Object.assign(IC,{search:['M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z','M21 21l-4.3-4.3'],pin:'M12 17v5M9 3h6l-1 7 3 3H7l3-3z',bell:['M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9','M13.7 21a2 2 0 0 1-3.4 0']});
+const ACC=[['#2b7bff','#4f9bff'],['#7c5cff','#a78bfa'],['#10b981','#34d399'],['#f43f5e','#fb7185'],['#f59e0b','#fbbf24']];
+const applyAccent=i=>{const a=ACC[i]||ACC[0],r=document.documentElement.style;r.setProperty('--acc',a[0]);r.setProperty('--acc2',a[1])};
 const urlB64=s=>{const b=(s+'='.repeat((4-s.length%4)%4)).replace(/-/g,'+').replace(/_/g,'/');return Uint8Array.from(atob(b),c=>c.charCodeAt(0))};
 function Chat({me,priv,first}){
   const [chats,setChats]=useState([]),[mem,setMem]=useState({}),[msgs,setMsgs]=useState({}),[aid,setAid]=useState(null),[unread,setUn]=useState({}),[last,setLast]=useState({});
   const [q,setQ]=useState(''),[hits,setHits]=useState([]),[txt,setTxt]=useState(''),[modal,setModal]=useState(null),[side,setSide]=useState(true),[live,setLive]=useState(true);
-  const [ver,setVer]=useState(0),[now,setNow]=useState(Date.now()),[unlock,setUnlock]=useState(''),[keyed,setKeyed]=useState(true),[tab,setTab]=useState('all'),[toast,setToast]=useState(''),[emo,setEmo]=useState(false),[prof,setProf]=useState(me),[sel,setSel]=useState(null),[replyTo,setReplyTo]=useState(null),[find,setFind]=useState(null),[lb,setLb]=useState(null),[editing,setEditing]=useState(null),[muted,setMuted]=useState(()=>JSON.parse(LS('nl-mute:'+me.id)||'[]')),[pins,setPins]=useState(()=>JSON.parse(LS('nl-pin:'+me.id)||'[]')),[pushOn,setPushOn]=useState(LS('nl-push:'+me.id)==='1');
+  const [ver,setVer]=useState(0),[now,setNow]=useState(Date.now()),[unlock,setUnlock]=useState(''),[keyed,setKeyed]=useState(true),[tab,setTab]=useState('all'),[toast,setToast]=useState(''),[emo,setEmo]=useState(false),[prof,setProf]=useState(me),[sel,setSel]=useState(null),[replyTo,setReplyTo]=useState(null),[find,setFind]=useState(null),[lb,setLb]=useState(null),[editing,setEditing]=useState(null),[atBottom,setAtBottom]=useState(true),[loaded,setLoaded]=useState(false),[readAt,setReadAt]=useState(0),[muted,setMuted]=useState(()=>JSON.parse(LS('nl-mute:'+me.id)||'[]')),[pins,setPins]=useState(()=>JSON.parse(LS('nl-pin:'+me.id)||'[]')),[pushOn,setPushOn]=useState(LS('nl-push:'+me.id)==='1');
   const [bk,setBk]=useState(()=>({auto:LS('nl-auto:'+me.id)==='1',at:+LS('nl-last:'+me.id)||0,msg:'',busy:false,pass:'',stale:false}));
   const upd=p=>setBk(b=>({...b,...p}));
-  const plain=useRef(new Map()),aidR=useRef(null),endR=useRef(null),taR=useRef(null),chatsR=useRef([]),fileR=useRef(null),grpR=useRef(null),lastDone=useRef(new Set()),boxR=useRef(null),mutedR=useRef([]);
+  const plain=useRef(new Map()),aidR=useRef(null),endR=useRef(null),taR=useRef(null),chatsR=useRef([]),fileR=useRef(null),grpR=useRef(null),lastDone=useRef(new Set()),boxR=useRef(null),mutedR=useRef([]),searchR=useRef(null);
   aidR.current=aid;chatsR.current=chats;mutedR.current=muted;
   const flash=m=>{setToast(m);setTimeout(()=>setToast(''),3500)};
   const cur=chats.find(c=>c.id===aid&&(!c.expires_at||new Date(c.expires_at)>Date.now()));
@@ -204,7 +206,7 @@ function Chat({me,priv,first}){
   const load=useCallback(async()=>{
     const {data}=await sb.from('chat_members').select('chat_id,is_admin,chats(id,kind,title,ttl_hours,code,expires_at,avatar),profiles(id,username,display_name,public_key,avatar)');
     const by={},cs={};(data||[]).forEach(r=>{(by[r.chat_id]??=[]).push({...r.profiles,is_admin:r.is_admin});cs[r.chat_id]=r.chats});
-    setMem(by);setChats(Object.values(cs).filter(Boolean));
+    setMem(by);setChats(Object.values(cs).filter(Boolean));setLoaded(true);
   },[]);
   async function syncChat(id){
     let lastAt=(await A.byChat(me.id,id)).pop()?.created_at;
@@ -311,6 +313,8 @@ function Chat({me,priv,first}){
   },[me.id]);
 
   useEffect(()=>{const f=e=>setLb(e.detail);window.addEventListener('nl-img',f);return()=>window.removeEventListener('nl-img',f)},[]);
+  useEffect(()=>{const f=e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();setSide(true);setTimeout(()=>searchR.current?.focus(),50)}};window.addEventListener('keydown',f);return()=>window.removeEventListener('keydown',f)},[]);
+  useEffect(()=>{if(!aid)return;const f=()=>LS('nl-read:'+me.id+':'+aid,String(Date.now()));window.addEventListener('beforeunload',f);return()=>{f();window.removeEventListener('beforeunload',f)}},[aid]);
   function removeLocal(id){A.del(me.id,id).catch(()=>{});setMsgs(o=>Object.fromEntries(Object.entries(o).map(([k,v])=>[k,v.filter(x=>x.id!==id)])))}
   const snip=m=>m.p?(m.p.t==='file'?'📎 '+m.p.name:m.p.text).slice(0,80):'Encrypted message';
   const jump=id=>{const el=document.getElementById('m-'+id);if(el){el.scrollIntoView({block:'center',behavior:'smooth'});el.classList.add('hl');setTimeout(()=>el.classList.remove('hl'),1500)}};
@@ -341,7 +345,7 @@ function Chat({me,priv,first}){
     LS('nl-push:'+me.id,null);setPushOn(false);
   }
   // ---- actions ----
-  const open=id=>{setAid(id);setSide(false);setUn(u=>({...u,[id]:0}))};
+  const open=id=>{setReadAt(+LS('nl-read:'+me.id+':'+id)||0);setAid(id);setSide(false);setUn(u=>({...u,[id]:0}))};
   async function dm(u){const {data,error}=await sb.rpc('create_dm',{other:u.id});if(error)return flash(error.message);setQ('');await load();open(data)}
   async function group(ev){
     ev.preventDefault();const f=new FormData(ev.target);
@@ -352,11 +356,16 @@ function Chat({me,priv,first}){
     if(error)return flash(error.message);setModal(null);await load();open(data);
   }
   async function post(payload,fp){
-    let e;
-    if(cur.kind==='temp'){const k=await C.getTempKey(cur.id);if(!k)throw new Error('Enter the room password first');e=await C.encryptTemp(payload,k,cur.id)}
-    else e=await C.encryptMessage(payload,mem[cur.id],cur.id);
-    const {error}=await sb.from('messages').insert({chat_id:cur.id,sender_id:me.id,file_path:fp||null,...e});if(error)throw error;
-    if(payload.t!=='react'&&payload.t!=='edit')api('/api/push',{chatId:cur.id}).catch(()=>{});
+    const id=crypto.randomUUID(),cid=cur.id,opt=payload.t!=='react'&&payload.t!=='edit';
+    if(opt){plain.current.set(id,payload);setMsgs(o=>({...o,[cid]:[...(o[cid]||[]),{id,chat_id:cid,sender_id:me.id,created_at:new Date().toISOString(),expires_at:new Date(Date.now()+864e5).toISOString(),p:payload,pending:true}]}))}
+    try{
+      let e;
+      if(cur.kind==='temp'){const k=await C.getTempKey(cid);if(!k)throw new Error('Enter the room password first');e=await C.encryptTemp(payload,k,cid)}
+      else e=await C.encryptMessage(payload,mem[cid],cid);
+      const {error}=await sb.from('messages').insert({id,chat_id:cid,sender_id:me.id,file_path:fp||null,...e});if(error)throw error;
+    }catch(x){if(opt)setMsgs(o=>({...o,[cid]:(o[cid]||[]).filter(m=>m.id!==id)}));throw x}
+    if(opt)setMsgs(o=>({...o,[cid]:(o[cid]||[]).map(m=>m.id===id?{...m,pending:false}:m)}));
+    if(payload.t!=='react'&&payload.t!=='edit')api('/api/push',{chatId:cid}).catch(()=>{});
   }
   async function send(ev){
     ev.preventDefault();const t=txt.trim();if(!t||!cur)return;setTxt('');setEmo(false);
@@ -409,16 +418,17 @@ function Chat({me,priv,first}){
       <header><img className="hlogo" src="/logo.png" width="34" height="34" alt=""/><h2 className="grow">Chats</h2><span className={'dot'+(live?' on':'')} title={live?'Live':'Paused to save free quota'}/>
         <Menu label="New" icon={IC.plus} items={[!me.is_guest&&{t:'New group',i:IC.users,f:()=>setModal('g')},{t:'Temporary room',i:IC.timer,f:()=>setModal('t')}]}/>
         <Menu label="Menu" items={[{t:'Settings',i:IC.sliders,f:()=>setModal('s')},{t:'Switch theme',i:IC.moon,f:toggleTheme},{t:'Sign out',i:IC.out,danger:true,f:signOut}]}/></header>
-      <input className="search" placeholder={me.is_guest?'Search chats':'Search chats or find people'} value={q} onChange={e=>setQ(e.target.value)} aria-label="Search"/>
+      <input ref={searchR} className="search" placeholder={me.is_guest?'Search chats':'Search chats or find people'} value={q} onChange={e=>setQ(e.target.value)} aria-label="Search"/>
       <div className="chips">{[['all','All'],['dm','Direct'],['group','Groups'],['unread','Unread']].map(([k,l])=><button key={k} className={'chip'+(tab===k?' on':'')} onClick={()=>setTab(k)}>{l}</button>)}</div>
       {bk.stale&&bk.auto&&<div className="banner">Auto-backup needs a tap<button onClick={backupNow}>Back up</button></div>}
       <div className="list">
         {hits.length>0&&<><p className="mute pad">People</p>{hits.map(h=><div key={h.id} className="row" onClick={()=>dm(h)}><Av n={h.display_name} src={h.avatar}/><div className="grow"><b>{h.display_name}</b><span>@{h.username}</span></div></div>)}</>}
+        {!loaded&&[0,1,2,3].map(i=><div key={i} className="row skel"><div className="av sk"/><div className="grow"><div className="skl w60"/><div className="skl w40"/></div></div>)}
         {vis.map(c=><div key={c.id} className={'row'+(c.id===aid?' on':'')} tabIndex={0} role="button" onKeyDown={e=>e.key==='Enter'&&open(c.id)} onClick={()=>open(c.id)}>
           <Av n={title(c)} src={pic(c)}/>
           <div className="grow"><div className="r1"><b>{title(c)}</b><time>{pins.includes(c.id)?'📌 ':''}{muted.includes(c.id)?'🔕 ':''}{last[c.id]?ago(last[c.id].at):''}</time></div>
             <div className="r1"><span>{prev(c)}</span>{unread[c.id]>0&&<i className="badge">{unread[c.id]}</i>}</div></div></div>)}
-        {!vis.length&&!hits.length&&<p className="mute pad">Nothing here yet. Search a username or start a temp room.</p>}
+        {loaded&&!vis.length&&!hits.length&&<div className="empty"><img src="/logo.png" width="72" height="72" alt=""/><p className="mute">{tab==='all'&&!q?'No chats yet':'Nothing matches here'}</p>{tab==='all'&&!q&&<>{!me.is_guest&&<button className="wide" onClick={()=>setModal('g')}>＋ New group</button>}<button className="wide alt" onClick={()=>setModal('t')}>⏱ Temporary room</button><p className="mute" style={{fontSize:13}}>Or type a username above to find someone.</p></>}</div>}
       </div>
     </aside>
     <main onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();const f=e.dataTransfer.files[0];if(f&&cur&&!(cur.kind==='temp'&&!keyed))sendFile(f)}}>{cur?<>
@@ -427,20 +437,22 @@ function Chat({me,priv,first}){
         <Menu label="Chat options" items={[cur.kind==='temp'&&{t:'Copy invite',i:IC.copy,f:()=>{navigator.clipboard?.writeText(`Join my NexLink.Chat temp room\nCode: ${cur.code.slice(0,4)}-${cur.code.slice(4)}\n${location.origin}\n(Ask me for the password)`);flash('Invite copied')}},{t:pins.includes(cur.id)?'Unpin chat':'Pin chat',i:IC.pin,f:()=>togglePin(cur.id)},{t:muted.includes(cur.id)?'Unmute notifications':'Mute notifications',i:IC.bell,f:()=>toggleMute(cur.id)},cur.kind==='group'&&{t:'Group info & members',i:IC.users,f:()=>setModal('i')},{t:'Search in chat',i:IC.search,f:()=>setFind('')},cur.kind==='group'&&{t:'Change group photo',i:IC.camera,f:()=>grpR.current.click()},cur.kind!=='temp'&&{t:'Disappearing messages',i:IC.timer,f:()=>setModal('d')},cur.kind==='dm'&&{t:'Verify safety number',i:IC.shield,f:verify},cur.kind!=='dm'&&{t:cur.kind==='temp'?'Leave room':'Leave group',i:IC.out,danger:true,f:leave}]}/></header>
       <input ref={grpR} type="file" accept="image/*" hidden onChange={e=>{setGrpPic(e.target.files[0]);e.target.value=''}}/>
       {find!=null&&<div className="findbar"><input autoFocus value={find} onChange={e=>setFind(e.target.value)} placeholder="Search in this chat" aria-label="Search in this chat"/><button className="ic" aria-label="Close search" onClick={()=>setFind(null)}>✕</button></div>}
-      <div className="msgs" ref={boxR}>
+      <div className="msgs" ref={boxR} onScroll={e=>{const b=e.currentTarget;setAtBottom(b.scrollHeight-b.scrollTop-b.clientHeight<200)}}>
         {!shown.length&&<p className="mute" style={{margin:'auto'}}>No messages yet. Say hello.</p>}
-        {shown.map((m,i)=>{const pv=shown[i-1],d=new Date(m.created_at),head=!pv||pv.sender_id!==m.sender_id||d-new Date(pv.created_at)>300000,newDay=!pv||new Date(pv.created_at).toDateString()!==d.toDateString(),mine=m.sender_id===me.id,sn=nm((mem[cur.id]||[]).find(p=>p.id===m.sender_id));
+        {shown.map((m,i)=>{const pv=shown[i-1],d=new Date(m.created_at),head=!pv||pv.sender_id!==m.sender_id||d-new Date(pv.created_at)>300000,newDay=!pv||new Date(pv.created_at).toDateString()!==d.toDateString(),mine=m.sender_id===me.id,sp=(mem[cur.id]||[]).find(p=>p.id===m.sender_id),sn=nm(sp),firstNew=readAt>0&&!mine&&d>readAt&&(!pv||new Date(pv.created_at)<=readAt);
           return <div key={m.id} style={{display:'contents'}}>
             {newDay&&<div className="day">{d.toLocaleDateString([],{weekday:'long',day:'numeric',month:'short'})}</div>}
-            <div id={'m-'+m.id} className={'b'+(mine?' me':'')+(head?' first':'')} onClick={e=>{if(!e.target.closest('a,button,img'))setSel(sel===m.id?null:m.id)}}>
+            {firstNew&&<div className="newdiv"><span>New messages</span></div>}
+            <div className={'mrow'+(mine?' mine':'')}>{!mine&&(head?<Av n={sn} src={sp?.avatar}/>:<span className="avs"/>)}<div id={'m-'+m.id} className={'b'+(mine?' me':'')+(head?' first':'')+(m.pending?' pending':'')} onClick={e=>{if(!e.target.closest('a,button,img'))setSel(sel===m.id?null:m.id)}}>
               {cur.kind!=='dm'&&!mine&&head&&<i style={{color:`hsl(${hue(m.sender_id)} 75% 45%)`}}>{sn}</i>}
               {m.p?.re&&<div className="quote" onClick={()=>jump(m.p.re.id)}><b>{m.p.re.n}</b><span>{m.p.re.t}</span></div>}
               {m.p?(m.p.t==='file'?<FileMsg p={m.p}/>:<Linkify text={ed[m.id]??m.p.text}/>):<em>Can’t decrypt on this device</em>}{ed[m.id]!=null&&<small className="edited"> (edited)</small>}
               {reacts[m.id]&&Object.keys(reacts[m.id]).length>0&&<div className="chipsr">{Object.entries(Object.values(reacts[m.id]).reduce((a,e)=>(a[e]=(a[e]||0)+1,a),{})).map(([e,n])=><button key={e} className={'rx'+(reacts[m.id][me.id]===e?' mine':'')} onClick={()=>react(m,e)}>{e} {n}</button>)}</div>}
-              <time>{d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</time>
-              {sel===m.id&&<div className="acts">{['👍','❤️','😂','😮','😢','🙏'].map(e=><button key={e} onClick={()=>{react(m,e);setSel(null)}}>{e}</button>)}<button onClick={()=>{setReplyTo({id:m.id,n:sn,t:snip(m)});setSel(null);taR.current?.focus()}}>Reply</button>{m.p?.text&&<button onClick={()=>{navigator.clipboard?.writeText(m.p.text);flash('Copied');setSel(null)}}>Copy</button>}{mine&&m.p?.text&&<button onClick={()=>{setEditing(m);setTxt(ed[m.id]??m.p.text);setSel(null);taR.current?.focus()}}>Edit</button>}{mine&&<button onClick={()=>del(m)}>Delete</button>}</div>}</div></div>})}
+              <time>{m.pending?'sending…':d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</time>
+              {sel===m.id&&<div className="acts">{['👍','❤️','😂','😮','😢','🙏'].map(e=><button key={e} onClick={()=>{react(m,e);setSel(null)}}>{e}</button>)}<button onClick={()=>{setReplyTo({id:m.id,n:sn,t:snip(m)});setSel(null);taR.current?.focus()}}>Reply</button>{m.p?.text&&<button onClick={()=>{navigator.clipboard?.writeText(m.p.text);flash('Copied');setSel(null)}}>Copy</button>}{mine&&m.p?.text&&<button onClick={()=>{setEditing(m);setTxt(ed[m.id]??m.p.text);setSel(null);taR.current?.focus()}}>Edit</button>}{mine&&<button onClick={()=>del(m)}>Delete</button>}</div>}</div></div></div>})}
         <div ref={endR}/>
       </div>
+      {!atBottom&&<button className="jump" aria-label="Scroll to latest" onClick={()=>endR.current?.scrollIntoView({behavior:'smooth',block:'end'})}>↓</button>}
       {cur.kind==='temp'&&!keyed?<form className="send" onSubmit={unlockRoom}><input type="password" required value={unlock} onChange={e=>setUnlock(e.target.value)} placeholder="Room password to unlock"/><button>Unlock</button></form>:<>{replyTo&&<div className="replybar"><span><b>{replyTo.n}</b> {replyTo.t}</span><button className="ic" onClick={()=>setReplyTo(null)} aria-label="Cancel reply">✕</button></div>}
       {editing&&<div className="replybar"><span><b>Editing</b> {snip(editing)}</span><button className="ic" onClick={()=>{setEditing(null);setTxt('')}} aria-label="Cancel edit">✕</button></div>}
       <form className="send" onSubmit={send}>
@@ -465,6 +477,7 @@ function Chat({me,priv,first}){
         <div><b>{nm(prof)}</b><span className="mute" style={{display:'block'}}>@{prof.username}{me.is_guest?' · guest':''}</span></div></div>
       <button className="alt" onClick={toggleTheme}>Switch light / dark theme</button>
       <button className="alt" onClick={pushOn?disablePush:enablePush}>{pushOn?'Turn off background notifications':'Turn on background notifications'}</button>
+      <div className="swatches" role="group" aria-label="Accent colour">{ACC.map((a,i)=><button key={i} type="button" className="sw" aria-label={'Accent colour '+(i+1)} style={{background:`linear-gradient(135deg,${a[0]},${a[1]})`}} onClick={()=>{applyAccent(i);LS('nl-accent',String(i))}}/>)}</div>
       {!me.is_guest&&<><b>Google Drive backup</b>
         {!D.configured?<p className="err">Add NEXT_PUBLIC_GOOGLE_CLIENT_ID in Vercel to enable backup.</p>:bk.auto?<>
           <p className="mute">Auto-backup is on. Last backup: {bk.at?new Date(bk.at).toLocaleString():'never'}. It runs about once a day while NexLink.Chat is open.</p>
@@ -488,6 +501,6 @@ function Chat({me,priv,first}){
       <b>Safety number with {modal.n}</b><p className="mute">Compare these numbers on a call. If both match, nobody is intercepting your chat.</p>
       <code style={{whiteSpace:'pre'}}>{modal.sn}</code><button onClick={()=>setModal(null)}>Close</button></div></div>}
     {lb&&<div className="modal" onClick={()=>setLb(null)}><img src={lb} alt="" className="lbimg"/></div>}
-    {toast&&<div className="toast" role="status">{toast}</div>}
+    {toast&&<div className={'toast'+(/fail|error|cannot|can’t|wrong|not allowed|too large|limit|blocked|no user/i.test(toast)?' bad':'')} role="status">{toast}</div>}
   </div>;
 }
