@@ -41,3 +41,6 @@ Leave all `R2_*` variables unset. The app then stores encrypted files in Supabas
 
 ## Troubleshooting storage
 Open `https://YOUR-APP.vercel.app/api/storage-check?secret=YOUR_CRON_SECRET`. `sdkPut` tests the keys, `presignedPut` tests the exact link the browser uses. If `presignedPut` fails but `sdkPut` is ok, set `S3_SIGN_LENGTH=0` in Vercel and redeploy.
+
+## v6 (replies, delete, group management)
+Run `supabase/migration-v6.sql` once in the SQL Editor (adds add_member / remove_member / rename_chat).

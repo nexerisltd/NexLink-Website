@@ -13,7 +13,9 @@ const GIcon=()=><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="tru
 const IC={plus:'M12 5v14M5 12h14',more:'more',send:'M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z',back:'M15 18l-6-6 6-6',timer:['M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16z','M12 9v4l2 2','M9 2h6'],moon:'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z',out:'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9',cloud:'M17.5 19H9a7 7 0 1 1 6.7-9h1.8a4.5 4.5 0 0 1 0 9z',users:'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8',shield:'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',copy:['M9 9h11v11H9z','M5 15V4h11']};
 const Ic=({d,s=20})=><svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d==='more'?<g fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></g>:[].concat(d).map((x,i)=><path key={i} d={x}/>)}</svg>;
 const URL_RE=/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"])/g;
-const Linkify=({text})=>text.split(URL_RE).map((p,i)=>i%2?<a key={i} href={p} target="_blank" rel="noopener noreferrer nofollow">{p}</a>:p);
+const FMT=/(\*\*[^*\n]+\*\*|`[^`\n]+`)/g;
+const Fmt=({s})=>s.split(FMT).map((p,i)=>i%2?(p[0]==='`'?<code key={i}>{p.slice(1,-1)}</code>:<b key={i}>{p.slice(2,-2)}</b>):p);
+const Linkify=({text})=>text.split(URL_RE).map((p,i)=>i%2?<a key={i} href={p} target="_blank" rel="noopener noreferrer nofollow">{p}</a>:<Fmt key={i} s={p}/>);
 const keepable=c=>c.kind!=='temp'&&!c.ttl_hours;
 function Menu({items,label,icon}){
   const [o,setO]=useState(false),r=useRef(null);
@@ -168,25 +170,27 @@ function FileMsg({p}){
     finally{setBz(false)}
   },[p,isImg]);
   useEffect(()=>{if(isImg&&!u&&p.size<2e6)get()},[]);
-  return <div className="file">{u&&isImg?<img src={u} alt={p.name} className="pic" onClick={()=>window.open(u)}/>:
+  return <div className="file">{u&&isImg?<img src={u} alt={p.name} className="pic" onClick={()=>window.dispatchEvent(new CustomEvent('nl-img',{detail:u}))}/>:
     <button type="button" className="fbtn" disabled={bz} onClick={async()=>{const url=await get();if(url){const a=document.createElement('a');a.href=url;a.download=p.name;a.click()}}}>
       <Ic d={IC.file}/><span><b>{p.name}</b><small>{fsz(p.size)}{bz?' · loading…':' · tap to download'}</small></span></button>}
     {err&&<small className="err">{err}</small>}</div>;
 }
 
+Object.assign(IC,{search:['M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z','M21 21l-4.3-4.3']});
 function Chat({me,priv,first}){
   const [chats,setChats]=useState([]),[mem,setMem]=useState({}),[msgs,setMsgs]=useState({}),[aid,setAid]=useState(null),[unread,setUn]=useState({}),[last,setLast]=useState({});
   const [q,setQ]=useState(''),[hits,setHits]=useState([]),[txt,setTxt]=useState(''),[modal,setModal]=useState(null),[side,setSide]=useState(true),[live,setLive]=useState(true);
-  const [ver,setVer]=useState(0),[now,setNow]=useState(Date.now()),[unlock,setUnlock]=useState(''),[keyed,setKeyed]=useState(true),[tab,setTab]=useState('all'),[toast,setToast]=useState(''),[emo,setEmo]=useState(false),[prof,setProf]=useState(me);
+  const [ver,setVer]=useState(0),[now,setNow]=useState(Date.now()),[unlock,setUnlock]=useState(''),[keyed,setKeyed]=useState(true),[tab,setTab]=useState('all'),[toast,setToast]=useState(''),[emo,setEmo]=useState(false),[prof,setProf]=useState(me),[sel,setSel]=useState(null),[replyTo,setReplyTo]=useState(null),[find,setFind]=useState(null),[lb,setLb]=useState(null);
   const [bk,setBk]=useState(()=>({auto:LS('nl-auto:'+me.id)==='1',at:+LS('nl-last:'+me.id)||0,msg:'',busy:false,pass:'',stale:false}));
   const upd=p=>setBk(b=>({...b,...p}));
-  const plain=useRef(new Map()),aidR=useRef(null),endR=useRef(null),taR=useRef(null),chatsR=useRef([]),fileR=useRef(null),grpR=useRef(null),lastDone=useRef(new Set());
+  const plain=useRef(new Map()),aidR=useRef(null),endR=useRef(null),taR=useRef(null),chatsR=useRef([]),fileR=useRef(null),grpR=useRef(null),lastDone=useRef(new Set()),boxR=useRef(null);
   aidR.current=aid;chatsR.current=chats;
   const flash=m=>{setToast(m);setTimeout(()=>setToast(''),3500)};
   const cur=chats.find(c=>c.id===aid&&(!c.expires_at||new Date(c.expires_at)>Date.now()));
   const other=c=>(mem[c.id]||[]).find(p=>p.id!==me.id);
   const title=c=>c.kind==='dm'?nm(other(c)):c.title;
   const pic=c=>c.kind==='dm'?other(c)?.avatar:c.avatar;
+  const amAdmin=!!cur&&(mem[cur.id]||[]).some(p=>p.id===me.id&&p.is_admin);
   const left=c=>{const m=Math.max(0,Math.round((new Date(c.expires_at)-now)/60000));return `${Math.floor(m/60)}h ${m%60}m left`};
   const prev=c=>{const l=last[c.id];if(!l)return c.kind==='temp'?`Temp room · ${left(c)}`:'No messages yet';return(l.from===me.id?'You: ':'')+(l.p?(l.p.t==='file'?'📎 '+l.p.name:l.p.text):'🔒 Encrypted message')};
 
@@ -197,8 +201,8 @@ function Chat({me,priv,first}){
     return{...m,p:plain.current.get(m.id)};
   },[me.id,priv]);
   const load=useCallback(async()=>{
-    const {data}=await sb.from('chat_members').select('chat_id,chats(id,kind,title,ttl_hours,code,expires_at,avatar),profiles(id,username,display_name,public_key,avatar)');
-    const by={},cs={};(data||[]).forEach(r=>{(by[r.chat_id]??=[]).push(r.profiles);cs[r.chat_id]=r.chats});
+    const {data}=await sb.from('chat_members').select('chat_id,is_admin,chats(id,kind,title,ttl_hours,code,expires_at,avatar),profiles(id,username,display_name,public_key,avatar)');
+    const by={},cs={};(data||[]).forEach(r=>{(by[r.chat_id]??=[]).push({...r.profiles,is_admin:r.is_admin});cs[r.chat_id]=r.chats});
     setMem(by);setChats(Object.values(cs).filter(Boolean));
   },[]);
   async function syncChat(id){
@@ -211,7 +215,7 @@ function Chat({me,priv,first}){
   useEffect(()=>{if(first){setAid(first);setSide(false)}},[first]);
   useEffect(()=>{if(aid)C.getTempKey(aid).then(k=>setKeyed(!!k))},[aid,ver]);
   useEffect(()=>{const n=Object.values(unread).reduce((a,b)=>a+b,0);document.title=(n?`(${n}) `:'')+'NexLink.Chat'},[unread]);
-  useEffect(()=>{const f=e=>e.key==='Escape'&&(setModal(null),setEmo(false));window.addEventListener('keydown',f);return()=>window.removeEventListener('keydown',f)},[]);
+  useEffect(()=>{const f=e=>e.key==='Escape'&&(setModal(null),setEmo(false),setLb(null));window.addEventListener('keydown',f);return()=>window.removeEventListener('keydown',f)},[]);
   useEffect(()=>{if(!txt&&taR.current)taR.current.style.height='auto'},[txt]);
   useEffect(()=>{let t;const f=()=>{clearTimeout(t);if(document.hidden)t=setTimeout(()=>setLive(false),120000);else setLive(true)};document.addEventListener('visibilitychange',f);return()=>{document.removeEventListener('visibilitychange',f);clearTimeout(t)}},[]);
   useEffect(()=>{
@@ -228,6 +232,7 @@ function Chat({me,priv,first}){
         }
       })
       .on('postgres_changes',{event:'*',schema:'public',table:'chat_members'},()=>load())
+      .on('postgres_changes',{event:'DELETE',schema:'public',table:'messages'},({old:o})=>removeLocal(o.id))
       .subscribe();
     return()=>{sb.removeChannel(ch)};
   },[load,dec,me.id,live]);
@@ -250,7 +255,11 @@ function Chat({me,priv,first}){
     })();
     return()=>{off=true};
   },[aid,live,dec,ver]);
-  useEffect(()=>{endR.current?.scrollIntoView({block:'end'})},[msgs,aid]);
+  useEffect(()=>{
+    const b=boxR.current;if(!b)return;
+    const near=b.scrollHeight-b.scrollTop-b.clientHeight<160,mine=(msgs[aid]||[]).slice(-1)[0]?.sender_id===me.id;
+    if(near||mine||b.dataset.chat!==aid){endR.current?.scrollIntoView({block:'end'});b.dataset.chat=aid}
+  },[msgs,aid]);
   useEffect(()=>{
     const s=q.trim().toLowerCase().replace(/[^a-z0-9_]/g,'');
     if(me.is_guest||s.length<2){setHits([]);return}
@@ -300,6 +309,15 @@ function Chat({me,priv,first}){
     const t0=setTimeout(run,6000),iv=setInterval(run,36e5);return()=>{clearTimeout(t0);clearInterval(iv)};
   },[me.id]);
 
+  useEffect(()=>{const f=e=>setLb(e.detail);window.addEventListener('nl-img',f);return()=>window.removeEventListener('nl-img',f)},[]);
+  function removeLocal(id){A.del(me.id,id).catch(()=>{});setMsgs(o=>Object.fromEntries(Object.entries(o).map(([k,v])=>[k,v.filter(x=>x.id!==id)])))}
+  const snip=m=>m.p?(m.p.t==='file'?'📎 '+m.p.name:m.p.text).slice(0,80):'Encrypted message';
+  const jump=id=>{const el=document.getElementById('m-'+id);if(el){el.scrollIntoView({block:'center',behavior:'smooth'});el.classList.add('hl');setTimeout(()=>el.classList.remove('hl'),1500)}};
+  async function del(m){
+    if(!confirm('Delete this message for everyone?'))return;
+    const {error}=await sb.from('messages').delete().eq('id',m.id);
+    if(error)return flash(error.message);removeLocal(m.id);setSel(null);
+  }
   // ---- actions ----
   const open=id=>{setAid(id);setSide(false);setUn(u=>({...u,[id]:0}))};
   async function dm(u){const {data,error}=await sb.rpc('create_dm',{other:u.id});if(error)return flash(error.message);setQ('');await load();open(data)}
@@ -320,7 +338,7 @@ function Chat({me,priv,first}){
   async function send(ev){
     ev.preventDefault();const t=txt.trim();if(!t||!cur)return;setTxt('');setEmo(false);
     if('Notification' in window&&Notification.permission==='default')Notification.requestPermission();
-    try{await post({text:t})}catch(x){setTxt(t);flash(x.message)}
+    const re=replyTo;try{await post(re?{text:t,re}:{text:t});setReplyTo(null)}catch(x){setTxt(t);flash(x.message)}
   }
   async function sendFile(f){
     if(!f||!cur)return;
@@ -352,7 +370,7 @@ function Chat({me,priv,first}){
 
   const vis=chats.filter(c=>(!c.expires_at||new Date(c.expires_at)>now)&&(tab==='all'||(tab==='unread'?unread[c.id]>0:c.kind===tab))&&(!q.trim()||title(c).toLowerCase().includes(q.trim().toLowerCase())))
     .sort((a,b)=>new Date(last[b.id]?.at||0)-new Date(last[a.id]?.at||0));
-  const shown=cur?(msgs[cur.id]||[]).filter(m=>keepable(cur)||new Date(m.expires_at)>Date.now()):[];
+  const shown=cur?(msgs[cur.id]||[]).filter(m=>keepable(cur)||new Date(m.expires_at)>Date.now()).filter(m=>!find||(m.p&&(m.p.text||m.p.name||'').toLowerCase().includes(find.toLowerCase()))):[];
 
   return <div className={'app'+(side?' open':'')}>
     <nav className="rail"><img src="/logo.png" width="42" height="42" alt="NexLink.Chat"/>
@@ -374,32 +392,43 @@ function Chat({me,priv,first}){
         {!vis.length&&!hits.length&&<p className="mute pad">Nothing here yet. Search a username or start a temp room.</p>}
       </div>
     </aside>
-    <main>{cur?<>
+    <main onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();const f=e.dataTransfer.files[0];if(f&&cur&&!(cur.kind==='temp'&&!keyed))sendFile(f)}}>{cur?<>
       <header><button className="ic back" aria-label="Back" onClick={()=>setSide(true)}><Ic d={IC.back}/></button><Av n={title(cur)} src={pic(cur)}/>
         <div className="grow"><b>{title(cur)}</b><span className={'mute'+(cur.kind==='temp'&&new Date(cur.expires_at)-now<600000?' warn':'')}>{cur.kind==='temp'?`Code ${cur.code.slice(0,4)}-${cur.code.slice(4)} · ${left(cur)} · ${(mem[cur.id]||[]).length} people`:cur.kind==='dm'?'End-to-end encrypted':`${(mem[cur.id]||[]).length} members`}</span></div>
-        <Menu label="Chat options" items={[cur.kind==='temp'&&{t:'Copy invite',i:IC.copy,f:()=>{navigator.clipboard?.writeText(`Join my NexLink.Chat temp room\nCode: ${cur.code.slice(0,4)}-${cur.code.slice(4)}\n${location.origin}\n(Ask me for the password)`);flash('Invite copied')}},cur.kind==='group'&&{t:'Change group photo',i:IC.camera,f:()=>grpR.current.click()},cur.kind!=='temp'&&{t:'Disappearing messages',i:IC.timer,f:()=>setModal('d')},cur.kind==='dm'&&{t:'Verify safety number',i:IC.shield,f:verify},cur.kind!=='dm'&&{t:cur.kind==='temp'?'Leave room':'Leave group',i:IC.out,danger:true,f:leave}]}/></header>
+        <Menu label="Chat options" items={[cur.kind==='temp'&&{t:'Copy invite',i:IC.copy,f:()=>{navigator.clipboard?.writeText(`Join my NexLink.Chat temp room\nCode: ${cur.code.slice(0,4)}-${cur.code.slice(4)}\n${location.origin}\n(Ask me for the password)`);flash('Invite copied')}},cur.kind==='group'&&{t:'Group info & members',i:IC.users,f:()=>setModal('i')},{t:'Search in chat',i:IC.search,f:()=>setFind('')},cur.kind==='group'&&{t:'Change group photo',i:IC.camera,f:()=>grpR.current.click()},cur.kind!=='temp'&&{t:'Disappearing messages',i:IC.timer,f:()=>setModal('d')},cur.kind==='dm'&&{t:'Verify safety number',i:IC.shield,f:verify},cur.kind!=='dm'&&{t:cur.kind==='temp'?'Leave room':'Leave group',i:IC.out,danger:true,f:leave}]}/></header>
       <input ref={grpR} type="file" accept="image/*" hidden onChange={e=>{setGrpPic(e.target.files[0]);e.target.value=''}}/>
-      <div className="msgs">
+      {find!=null&&<div className="findbar"><input autoFocus value={find} onChange={e=>setFind(e.target.value)} placeholder="Search in this chat" aria-label="Search in this chat"/><button className="ic" aria-label="Close search" onClick={()=>setFind(null)}>✕</button></div>}
+      <div className="msgs" ref={boxR}>
         {!shown.length&&<p className="mute" style={{margin:'auto'}}>No messages yet. Say hello.</p>}
-        {shown.map((m,i)=>{const pv=shown[i-1],d=new Date(m.created_at),head=!pv||pv.sender_id!==m.sender_id||d-new Date(pv.created_at)>300000,newDay=!pv||new Date(pv.created_at).toDateString()!==d.toDateString(),mine=m.sender_id===me.id;
+        {shown.map((m,i)=>{const pv=shown[i-1],d=new Date(m.created_at),head=!pv||pv.sender_id!==m.sender_id||d-new Date(pv.created_at)>300000,newDay=!pv||new Date(pv.created_at).toDateString()!==d.toDateString(),mine=m.sender_id===me.id,sn=nm((mem[cur.id]||[]).find(p=>p.id===m.sender_id));
           return <div key={m.id} style={{display:'contents'}}>
             {newDay&&<div className="day">{d.toLocaleDateString([],{weekday:'long',day:'numeric',month:'short'})}</div>}
-            <div className={'b'+(mine?' me':'')+(head?' first':'')}>
-              {cur.kind!=='dm'&&!mine&&head&&<i style={{color:`hsl(${hue(m.sender_id)} 75% 45%)`}}>{nm((mem[cur.id]||[]).find(p=>p.id===m.sender_id))}</i>}
+            <div id={'m-'+m.id} className={'b'+(mine?' me':'')+(head?' first':'')} onClick={e=>{if(!e.target.closest('a,button,img'))setSel(sel===m.id?null:m.id)}}>
+              {cur.kind!=='dm'&&!mine&&head&&<i style={{color:`hsl(${hue(m.sender_id)} 75% 45%)`}}>{sn}</i>}
+              {m.p?.re&&<div className="quote" onClick={()=>jump(m.p.re.id)}><b>{m.p.re.n}</b><span>{m.p.re.t}</span></div>}
               {m.p?(m.p.t==='file'?<FileMsg p={m.p}/>:<Linkify text={m.p.text}/>):<em>Can’t decrypt on this device</em>}
-              <time>{d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</time></div></div>})}
+              <time>{d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</time>
+              {sel===m.id&&<div className="acts"><button onClick={()=>{setReplyTo({id:m.id,n:sn,t:snip(m)});setSel(null);taR.current?.focus()}}>Reply</button>{m.p?.text&&<button onClick={()=>{navigator.clipboard?.writeText(m.p.text);flash('Copied');setSel(null)}}>Copy</button>}{mine&&<button onClick={()=>del(m)}>Delete</button>}</div>}</div></div>})}
         <div ref={endR}/>
       </div>
-      {cur.kind==='temp'&&!keyed?<form className="send" onSubmit={unlockRoom}><input type="password" required value={unlock} onChange={e=>setUnlock(e.target.value)} placeholder="Room password to unlock"/><button>Unlock</button></form>:
+      {cur.kind==='temp'&&!keyed?<form className="send" onSubmit={unlockRoom}><input type="password" required value={unlock} onChange={e=>setUnlock(e.target.value)} placeholder="Room password to unlock"/><button>Unlock</button></form>:<>{replyTo&&<div className="replybar"><span><b>{replyTo.n}</b> {replyTo.t}</span><button className="ic" onClick={()=>setReplyTo(null)} aria-label="Cancel reply">✕</button></div>}
       <form className="send" onSubmit={send}>
         <input ref={fileR} type="file" hidden onChange={e=>{sendFile(e.target.files[0]);e.target.value=''}}/>
         <button type="button" className="ic" aria-label="Attach a file" onClick={()=>fileR.current.click()}><Ic d={IC.clip}/></button>
-        <textarea ref={taR} rows={1} value={txt} aria-label="Message" placeholder="Type a message…" maxLength={4000} onChange={e=>setTxt(e.target.value)} onInput={e=>{e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,140)+'px'}} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();send(e)}}}/>
+        <textarea ref={taR} rows={1} value={txt} aria-label="Message" placeholder="Type a message…" maxLength={4000} onPaste={e=>{const f=e.clipboardData.files[0];if(f){e.preventDefault();sendFile(f)}}} onChange={e=>setTxt(e.target.value)} onInput={e=>{e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,140)+'px'}} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();send(e)}}}/>
         <div className="menu"><button type="button" className="ic" aria-label="Emoji" onClick={()=>setEmo(!emo)}><Ic d={IC.smile}/></button>
           {emo&&<div className="pop emo">{EMOJI.map(e=><button type="button" key={e} className="mi" onClick={()=>{setTxt(t=>t+e);setEmo(false)}}>{e}</button>)}</div>}</div>
-        <button className="sendbtn" aria-label="Send" disabled={!txt.trim()}><Ic d={IC.send}/></button></form>}
+        <button className="sendbtn" aria-label="Send" disabled={!txt.trim()}><Ic d={IC.send}/></button></form></>}
     </>:<div className="center"><img className="pulse" src="/logo.png" width="120" height="120" alt=""/><h2><Brand/></h2><p className="mute">Pick a chat, or start something new.</p>{!me.is_guest&&<button className="wide" onClick={()=>setModal('g')}>＋ New group</button>}<button className="wide alt" onClick={()=>setModal('t')}>⏱ Temporary room</button></div>}</main>
 
+    {modal==='i'&&cur&&<div className="modal" onClick={()=>setModal(null)}><div className="card" onClick={e=>e.stopPropagation()}>
+      <b>{cur.title}</b>
+      {amAdmin&&<form className="inl" onSubmit={async e=>{e.preventDefault();const t=String(new FormData(e.target).get('t'));const {error}=await sb.rpc('rename_chat',{c:cur.id,t});if(error)return flash(error.message);await load();flash('Renamed')}}><input name="t" defaultValue={cur.title} maxLength={60} aria-label="Group name"/><button>Save</button></form>}
+      <p className="mute">{(mem[cur.id]||[]).length} members. New members can’t read older messages.</p>
+      {(mem[cur.id]||[]).map(p=><div key={p.id} className="row"><Av n={p.display_name} src={p.avatar}/><div className="grow"><b>{p.display_name}{p.is_admin?' · admin':''}</b><span>@{p.username}</span></div>
+        {amAdmin&&p.id!==me.id&&<button className="alt danger sm" onClick={async()=>{if(!confirm('Remove '+p.display_name+'?'))return;const {error}=await sb.rpc('remove_member',{c:cur.id,u:p.id});if(error)return flash(error.message);load()}}>Remove</button>}</div>)}
+      {amAdmin&&<form className="inl" onSubmit={async e=>{e.preventDefault();const f=e.target,u=String(new FormData(f).get('u')).replace('@','').toLowerCase().trim();const {data:pr}=await sb.from('profiles').select('id').eq('username',u).eq('is_guest',false).maybeSingle();if(!pr)return flash('No user @'+u);const {error}=await sb.rpc('add_member',{c:cur.id,u:pr.id});if(error)return flash(error.message);f.reset();load();flash('Added')}}><input name="u" placeholder="Add by username" required/><button>Add</button></form>}
+      <button onClick={()=>setModal(null)}>Close</button></div></div>}
     {modal==='s'&&<div className="modal" onClick={()=>setModal(null)}><div className="card" onClick={e=>e.stopPropagation()}>
       <div className="prow"><label className="pbtn" title="Change photo"><Av n={nm(prof)} src={prof.avatar}/><span className="cam"><Ic d={IC.camera} s={14}/></span><input type="file" accept="image/*" hidden onChange={e=>{setMyPic(e.target.files[0]);e.target.value=''}}/></label>
         <div><b>{nm(prof)}</b><span className="mute" style={{display:'block'}}>@{prof.username}{me.is_guest?' · guest':''}</span></div></div>
@@ -426,6 +455,7 @@ function Chat({me,priv,first}){
     {modal?.sn&&<div className="modal" onClick={()=>setModal(null)}><div className="card" onClick={e=>e.stopPropagation()}>
       <b>Safety number with {modal.n}</b><p className="mute">Compare these numbers on a call. If both match, nobody is intercepting your chat.</p>
       <code style={{whiteSpace:'pre'}}>{modal.sn}</code><button onClick={()=>setModal(null)}>Close</button></div></div>}
+    {lb&&<div className="modal" onClick={()=>setLb(null)}><img src={lb} alt="" className="lbimg"/></div>}
     {toast&&<div className="toast" role="status">{toast}</div>}
   </div>;
 }
