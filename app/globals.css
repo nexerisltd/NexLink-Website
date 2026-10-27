@@ -116,3 +116,16 @@ code{font-size:17px;line-height:1.8;letter-spacing:.04em;word-spacing:8px;backgr
 .swatches{display:flex;gap:10px}.sw{width:30px!important;height:30px;padding:0!important;border-radius:50%}
 @media(prefers-reduced-motion:no-preference){.modal{animation:fade .15s}.card{animation:rise .18s ease-out}@keyframes fade{from{opacity:0}}@keyframes rise{from{opacity:0;transform:translateY(8px) scale(.98)}}}
 @media(max-width:760px){.app{grid-template-rows:minmax(0,1fr) auto}.rail{display:flex;order:2;flex-direction:row;justify-content:space-around;padding:4px 6px calc(4px + env(safe-area-inset-bottom));border-right:0;border-top:1px solid var(--line);background:var(--panel)}.rail img,.rail .grow{display:none}.rb{width:auto;flex:1}.app:not(.open) .rail{display:none}.jump{bottom:92px}}
+.mrow{position:relative;touch-action:pan-y}
+.msgs{overflow-x:hidden}
+.swi{position:absolute;top:50%;margin-top:-15px;width:30px;height:30px;border-radius:50%;background:var(--rowon);color:var(--acc);display:grid;place-items:center;opacity:0;pointer-events:none}
+.mrow:not(.mine) .swi{left:-48px}.mrow.mine .swi{right:-48px}
+.avb{width:auto!important;padding:0!important;background:none!important;border-radius:50%;flex:none}
+.hov{display:flex;gap:2px;align-self:center;opacity:0;transition:opacity .12s}
+.mrow:hover .hov,.hov:focus-within{opacity:1}
+.hov button{width:28px;height:28px;padding:0;background:transparent;color:var(--mute);border-radius:50%;display:grid;place-items:center}
+.hov button:hover{background:var(--rowon);color:var(--acc)}
+@media(hover:none){.hov{display:none}}
+.b i.who{cursor:pointer}.b i.who:hover{text-decoration:underline}
+.clk{cursor:pointer}
+.pbig{display:grid;place-items:center}.pbig .av{width:104px;height:104px;font-size:40px}
