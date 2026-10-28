@@ -177,16 +177,18 @@ function FileMsg({p}){
 }
 
 Object.assign(IC,{search:['M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z','M21 21l-4.3-4.3'],pin:'M12 17v5M9 3h6l-1 7 3 3H7l3-3z',reply:['M9 17l-5-5 5-5','M4 12h11a5 5 0 0 1 5 5v2'],bell:['M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9','M13.7 21a2 2 0 0 1-3.4 0']});
+Object.assign(IC,{trash:['M3 6h18','M8 6V4h8v2','M19 6l-1 14H6L5 6'],fwd:'M15 17l5-5-5-5M4 18v-2a4 4 0 0 1 4-4h12',edit:'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',select:['M9 11l3 3 8-8','M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'],hist:'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2'});
+const REACTS=['👍','❤️','😂','😮','😢','🙏'];
 const ACC=[['#2b7bff','#4f9bff'],['#7c5cff','#a78bfa'],['#10b981','#34d399'],['#f43f5e','#fb7185'],['#f59e0b','#fbbf24']];
 const applyAccent=i=>{const a=ACC[i]||ACC[0],r=document.documentElement.style;r.setProperty('--acc',a[0]);r.setProperty('--acc2',a[1])};
 const urlB64=s=>{const b=(s+'='.repeat((4-s.length%4)%4)).replace(/-/g,'+').replace(/_/g,'/');return Uint8Array.from(atob(b),c=>c.charCodeAt(0))};
 function Chat({me,priv,first}){
   const [chats,setChats]=useState([]),[mem,setMem]=useState({}),[msgs,setMsgs]=useState({}),[aid,setAid]=useState(null),[unread,setUn]=useState({}),[last,setLast]=useState({});
   const [q,setQ]=useState(''),[hits,setHits]=useState([]),[txt,setTxt]=useState(''),[modal,setModal]=useState(null),[side,setSide]=useState(true),[live,setLive]=useState(true);
-  const [ver,setVer]=useState(0),[now,setNow]=useState(Date.now()),[unlock,setUnlock]=useState(''),[keyed,setKeyed]=useState(true),[tab,setTab]=useState('all'),[toast,setToast]=useState(''),[emo,setEmo]=useState(false),[prof,setProf]=useState(me),[sel,setSel]=useState(null),[replyTo,setReplyTo]=useState(null),[find,setFind]=useState(null),[lb,setLb]=useState(null),[editing,setEditing]=useState(null),[atBottom,setAtBottom]=useState(true),[pview,setPview]=useState(null),[loaded,setLoaded]=useState(false),[readAt,setReadAt]=useState(0),[muted,setMuted]=useState(()=>JSON.parse(LS('nl-mute:'+me.id)||'[]')),[pins,setPins]=useState(()=>JSON.parse(LS('nl-pin:'+me.id)||'[]')),[pushOn,setPushOn]=useState(LS('nl-push:'+me.id)==='1');
+  const [ver,setVer]=useState(0),[now,setNow]=useState(Date.now()),[unlock,setUnlock]=useState(''),[keyed,setKeyed]=useState(true),[tab,setTab]=useState('all'),[toast,setToast]=useState(''),[emo,setEmo]=useState(false),[prof,setProf]=useState(me),[sel,setSel]=useState(null),[replyTo,setReplyTo]=useState(null),[find,setFind]=useState(null),[lb,setLb]=useState(null),[editing,setEditing]=useState(null),[atBottom,setAtBottom]=useState(true),[pview,setPview]=useState(null),[menu,setMenu]=useState(null),[rxp,setRxp]=useState(null),[selIds,setSelIds]=useState([]),[selMode,setSelMode]=useState(false),[grantFor,setGrantFor]=useState(null),[fwd,setFwd]=useState(null),[fq,setFq]=useState(''),[clr,setClr]=useState({}),[grants,setGrants]=useState({}),[hid,setHid]=useState(()=>JSON.parse(LS('nl-hide:'+me.id)||'[]')),[fresh,setFresh]=useState({}),[burst,setBurst]=useState(null),[loaded,setLoaded]=useState(false),[readAt,setReadAt]=useState(0),[muted,setMuted]=useState(()=>JSON.parse(LS('nl-mute:'+me.id)||'[]')),[pins,setPins]=useState(()=>JSON.parse(LS('nl-pin:'+me.id)||'[]')),[pushOn,setPushOn]=useState(LS('nl-push:'+me.id)==='1');
   const [bk,setBk]=useState(()=>({auto:LS('nl-auto:'+me.id)==='1',at:+LS('nl-last:'+me.id)||0,msg:'',busy:false,pass:'',stale:false}));
   const upd=p=>setBk(b=>({...b,...p}));
-  const plain=useRef(new Map()),aidR=useRef(null),endR=useRef(null),taR=useRef(null),chatsR=useRef([]),fileR=useRef(null),grpR=useRef(null),lastDone=useRef(new Set()),boxR=useRef(null),mutedR=useRef([]),searchR=useRef(null),swRef=useRef({}),ptrRef=useRef('mouse');
+  const plain=useRef(new Map()),aidR=useRef(null),endR=useRef(null),taR=useRef(null),chatsR=useRef([]),fileR=useRef(null),grpR=useRef(null),lastDone=useRef(new Set()),boxR=useRef(null),mutedR=useRef([]),searchR=useRef(null),swRef=useRef({}),ptrRef=useRef('mouse'),rxT=useRef(null),dragMoved=useRef(false),prevRx=useRef({});
   aidR.current=aid;chatsR.current=chats;mutedR.current=muted;
   const flash=m=>{setToast(m);setTimeout(()=>setToast(''),3500)};
   const cur=chats.find(c=>c.id===aid&&(!c.expires_at||new Date(c.expires_at)>Date.now()));
@@ -194,8 +196,10 @@ function Chat({me,priv,first}){
   const title=c=>c.kind==='dm'?nm(other(c)):c.title;
   const pic=c=>c.kind==='dm'?other(c)?.avatar:c.avatar;
   const amAdmin=!!cur&&(mem[cur.id]||[]).some(p=>p.id===me.id&&p.is_admin);
+  const selecting=selIds.length>0||selMode,gcount=(grants[aid]||[]).length;
+  const visibleMsg=m=>{const c=clr[m.chat_id];if(!c)return true;const t=+new Date(m.created_at);if(t>+new Date(c))return true;return(grants[m.chat_id]||[]).some(g=>t>=+new Date(g.from_ts)&&t<=+new Date(g.to_ts))};
   const left=c=>{const m=Math.max(0,Math.round((new Date(c.expires_at)-now)/60000));return `${Math.floor(m/60)}h ${m%60}m left`};
-  const prev=c=>{const l=last[c.id];if(!l)return c.kind==='temp'?`Temp room · ${left(c)}`:'No messages yet';return(l.from===me.id?'You: ':'')+(l.p?(l.p.t==='file'?'📎 '+l.p.name:l.p.t==='react'?'Reacted '+l.p.e:l.p.text):'🔒 Encrypted message')};
+  const prev=c=>{const l=last[c.id];if(!l)return c.kind==='temp'?`Temp room · ${left(c)}`:'No messages yet';return(l.from===me.id?'You: ':'')+(l.p?(l.p.t==='file'?'📎 '+l.p.name:l.p.t==='react'?'Reacted '+l.p.e:l.p.t==='hreq'?'Requested chat history':l.p.t==='hgrant'?'Shared chat history':l.p.text):'🔒 Encrypted message')};
 
   const dec=useCallback(async m=>{
     if(!plain.current.has(m.id)){let p=null;
@@ -204,12 +208,12 @@ function Chat({me,priv,first}){
     return{...m,p:plain.current.get(m.id)};
   },[me.id,priv]);
   const load=useCallback(async()=>{
-    const {data}=await sb.from('chat_members').select('chat_id,is_admin,chats(id,kind,title,ttl_hours,code,expires_at,avatar),profiles(id,username,display_name,public_key,avatar,is_guest)');
-    const by={},cs={};(data||[]).forEach(r=>{(by[r.chat_id]??=[]).push({...r.profiles,is_admin:r.is_admin});cs[r.chat_id]=r.chats});
-    setMem(by);setChats(Object.values(cs).filter(Boolean));setLoaded(true);
+    const {data}=await sb.from('chat_members').select('chat_id,is_admin,cleared_at,chats(id,kind,title,ttl_hours,code,expires_at,avatar),profiles(id,username,display_name,public_key,avatar,is_guest)');
+    const by={},cs={},cl={};(data||[]).forEach(r=>{(by[r.chat_id]??=[]).push({...r.profiles,is_admin:r.is_admin});cs[r.chat_id]=r.chats;if(r.profiles?.id===me.id)cl[r.chat_id]=r.cleared_at});
+    setMem(by);setClr(cl);setChats(Object.values(cs).filter(Boolean));setLoaded(true);loadGrants();
   },[]);
-  async function syncChat(id){
-    let lastAt=(await A.byChat(me.id,id)).pop()?.created_at;
+  async function syncChat(id,full){
+    let lastAt=full?null:(await A.byChat(me.id,id)).pop()?.created_at;
     for(;;){let qy=sb.from('messages').select('*').eq('chat_id',id).order('created_at').limit(500);if(lastAt)qy=qy.gt('created_at',lastAt);
       const {data}=await qy;if(!data?.length)break;await A.put(me.id,data);lastAt=data[data.length-1].created_at;if(data.length<500)break}
   }
@@ -218,7 +222,7 @@ function Chat({me,priv,first}){
   useEffect(()=>{if(first){setAid(first);setSide(false)}},[first]);
   useEffect(()=>{if(aid)C.getTempKey(aid).then(k=>setKeyed(!!k))},[aid,ver]);
   useEffect(()=>{const n=Object.values(unread).reduce((a,b)=>a+b,0);document.title=(n?`(${n}) `:'')+'NexLink.Chat'},[unread]);
-  useEffect(()=>{const f=e=>e.key==='Escape'&&(setModal(null),setEmo(false),setLb(null),setPview(null));window.addEventListener('keydown',f);return()=>window.removeEventListener('keydown',f)},[]);
+  useEffect(()=>{const f=e=>e.key==='Escape'&&(setModal(null),setEmo(false),setLb(null),setPview(null),setMenu(null),setRxp(null),setFwd(null),setSelIds([]),setSelMode(false),setGrantFor(null));window.addEventListener('keydown',f);return()=>window.removeEventListener('keydown',f)},[]);
   useEffect(()=>{if(!txt&&taR.current)taR.current.style.height='auto'},[txt]);
   useEffect(()=>{let t;const f=()=>{clearTimeout(t);if(document.hidden)t=setTimeout(()=>setLive(false),120000);else setLive(true)};document.addEventListener('visibilitychange',f);return()=>{document.removeEventListener('visibilitychange',f);clearTimeout(t)}},[]);
   useEffect(()=>{
@@ -227,6 +231,7 @@ function Chat({me,priv,first}){
       .on('postgres_changes',{event:'INSERT',schema:'public',table:'messages'},async({new:m})=>{
         const c0=chatsR.current.find(c=>c.id===m.chat_id);if(c0&&keepable(c0))A.put(me.id,[m]).catch(()=>{});
         const x=await dec(m);
+        if(x.p?.t==='hgrant'&&x.p.to===me.id){await loadGrants();syncChat(m.chat_id,true).then(()=>setVer(v=>v+1)).catch(()=>{})}
         setLast(l=>({...l,[m.chat_id]:{p:x.p,at:m.created_at,from:m.sender_id}}));
         setMsgs(o=>o[m.chat_id]?{...o,[m.chat_id]:[...o[m.chat_id].filter(y=>y.id!==m.id),x]}:o);
         if(m.sender_id!==me.id&&x.p?.t!=='react'&&(m.chat_id!==aidR.current||document.hidden)){
@@ -251,13 +256,13 @@ function Chat({me,priv,first}){
     if(!aid||!live)return;let off=false;
     (async()=>{
       const c=chatsR.current.find(x=>x.id===aid);let rows;
-      if(c&&keepable(c)){await syncChat(aid);rows=(await A.byChat(me.id,aid)).slice(-300)}
+      if(c&&keepable(c)){const gk='nl-gs:'+me.id+':'+aid,full=+LS(gk)!==gcount;await syncChat(aid,full);if(full)LS(gk,String(gcount));rows=(await A.byChat(me.id,aid)).slice(-300)}
       else{const {data}=await sb.from('messages').select('*').eq('chat_id',aid).order('created_at',{ascending:false}).limit(80);rows=(data||[]).reverse()}
       const x=await Promise.all(rows.map(dec));
       if(!off)setMsgs(o=>({...o,[aid]:x}));
     })();
     return()=>{off=true};
-  },[aid,live,dec,ver]);
+  },[aid,live,dec,ver,gcount]);
   useEffect(()=>{
     const b=boxR.current;if(!b)return;
     const near=b.scrollHeight-b.scrollTop-b.clientHeight<160,mine=(msgs[aid]||[]).slice(-1)[0]?.sender_id===me.id;
@@ -323,7 +328,7 @@ function Chat({me,priv,first}){
     const {error}=await sb.from('messages').delete().eq('id',m.id);
     if(error)return flash(error.message);removeLocal(m.id);setSel(null);
   }
-  async function react(m,e){try{await post({t:'react',to:m.id,e:reacts[m.id]?.[me.id]===e?'':e})}catch(x){flash(x.message)}}
+  async function react(m,e){const off=reacts[m.id]?.[me.id]===e;if(!off){setBurst({id:m.id,e,k:Date.now()});setTimeout(()=>setBurst(null),1100)}try{await post({t:'react',to:m.id,e:off?'':e})}catch(x){flash(x.message)}}
   const togglePin=id=>{const n=pins.includes(id)?pins.filter(x=>x!==id):[...pins,id];setPins(n);LS('nl-pin:'+me.id,JSON.stringify(n))};
   const toggleMute=async id=>{
     const n=muted.includes(id)?muted.filter(x=>x!==id):[...muted,id];setMuted(n);LS('nl-mute:'+me.id,JSON.stringify(n));
@@ -355,24 +360,97 @@ function Chat({me,priv,first}){
     setPview({...p,sn});
   }
   const openHead=()=>!cur?null:cur.kind==='dm'?openProfile(other(cur)):cur.kind==='group'?setModal('i'):null;
-  // swipe: others' messages to the right, your own to the left (touch screens)
+  const openMenu=(m,x,y)=>{if(m.pending)return;setRxp(null);setMenu({m,x,y})};
+  const copyText=t=>navigator.clipboard?.writeText(t);
+  const togglePick=id=>setSelIds(a=>a.includes(id)?a.filter(x=>x!==id):[...a,id]);
+  const clearSel=()=>{setSelIds([]);setSelMode(false);setGrantFor(null)};
+  useEffect(()=>{setSelIds([]);setSelMode(false);setGrantFor(null);setMenu(null);setRxp(null)},[aid]);
+  useEffect(()=>{const b=boxR.current;if(!b)return;const f=e=>{if(swRef.current?.held)e.preventDefault()};b.addEventListener('touchmove',f,{passive:false});return()=>b.removeEventListener('touchmove',f)},[aid,!!cur]);
+  // "Name: text" lines, replies as: Name: Replied on "quote" text
+  const fmtMsgs=list=>[...list].sort((a,b)=>new Date(a.created_at)-new Date(b.created_at)).filter(m=>m.p&&m.p.t!=='hreq'&&m.p.t!=='hgrant').map(m=>{
+    const sp=(mem[m.chat_id]||[]).find(p=>p.id===m.sender_id),t=m.p.t==='file'?'[File] '+m.p.name:(ed[m.id]??m.p.text);
+    return `${nm(sp)}: ${m.p.re?`Replied on "${m.p.re.t}" `:''}${t}`}).join('\n');
+  async function forwardTo(c){
+    const list=fwd,text=fmtMsgs(list);setFwd(null);setFq('');
+    if(text.length>3500)return flash('Too long to forward at once. Select fewer messages.');
+    try{await post({text,fwd:true},null,c);flash('Forwarded to '+title(c));clearSel()}catch(x){flash(x.message)}
+  }
+  async function deleteMsgs(list){
+    const mineIds=list.filter(m=>m.sender_id===me.id).map(m=>m.id),others=list.filter(m=>m.sender_id!==me.id).map(m=>m.id);
+    const n=list.length,msg=others.length?`Delete ${n} message${n>1?'s':''}? Yours are removed for everyone. Messages from others are removed only for you.`:`Delete ${n>1?n+' messages':'this message'} for everyone?`;
+    if(!confirm(msg))return;
+    if(mineIds.length){const {error}=await sb.from('messages').delete().in('id',mineIds);if(error)return flash(error.message)}
+    if(others.length){const nh=[...hid,...others];setHid(nh);LS('nl-hide:'+me.id,JSON.stringify(nh))}
+    list.forEach(m=>removeLocal(m.id));clearSel();
+  }
+  async function clearChat(){
+    if(!confirm('Clear this chat for you? Other people keep their copy. If everyone clears it, the messages are deleted for good.'))return;
+    const id=cur.id,{error}=await sb.rpc('clear_chat',{c:id});if(error)return flash(error.message);
+    await A.clearChat(me.id,id).catch(()=>{});setMsgs(o=>({...o,[id]:[]}));setLast(l=>({...l,[id]:undefined}));await load();flash('Chat cleared');
+  }
+  async function reqHistory(){
+    if(!confirm('Ask the other people in this chat to share the earlier messages with you?'))return;
+    try{await post({t:'hreq'});flash('Request sent')}catch(x){flash(x.message)}
+  }
+  async function loadGrants(){
+    const {data}=await sb.from('history_grants').select('chat_id,from_ts,to_ts').eq('user_id',me.id);
+    const g={};(data||[]).forEach(r=>{(g[r.chat_id]??=[]).push(r)});setGrants(g);
+  }
+  async function shareHistory(){
+    const ps=picked.slice().sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));if(!ps.length)return;
+    const {error}=await sb.rpc('grant_history',{c:cur.id,u:grantFor.u,from_id:ps[0].id,to_id:ps[ps.length-1].id});if(error)return flash(error.message);
+    try{await post({t:'hgrant',to:grantFor.u})}catch{}
+    flash('Chat history shared');clearSel();
+  }
+  // PC: press on empty chat space and drag up/down to select every message row the drag touches
+  function startDrag(e){
+    const box=boxR.current;if(!box||e.button!==0||e.target.closest('.b,button,a,input,textarea,.hov,.sysmsg'))return;
+    const r0=box.getBoundingClientRect();if(e.clientX>=r0.left+box.clientWidth)return;
+    e.preventDefault();dragMoved.current=false;
+    const y0=e.clientY-r0.top+box.scrollTop,sy=e.clientY;
+    const move=ev=>{
+      if(!dragMoved.current&&Math.abs(ev.clientY-sy)<6)return;dragMoved.current=true;
+      const rr=box.getBoundingClientRect();
+      if(ev.clientY<rr.top+30)box.scrollTop-=14;else if(ev.clientY>rr.bottom-30)box.scrollTop+=14;
+      const y1=ev.clientY-rr.top+box.scrollTop,lo=Math.min(y0,y1),hi=Math.max(y0,y1);
+      setSelIds([...box.querySelectorAll('.mrow')].filter(row=>{const q=row.getBoundingClientRect(),t=q.top-rr.top+box.scrollTop;return t+q.height>=lo&&t<=hi}).map(row=>row.dataset.mid));
+    };
+    const up=()=>{window.removeEventListener('mousemove',move);window.removeEventListener('mouseup',up);setTimeout(()=>{dragMoved.current=false},0)};
+    window.addEventListener('mousemove',move);window.addEventListener('mouseup',up);
+  }
+  // touch: swipe to reply (others right, yours left); hold = menu; hold then drag up/down = multi-select
   const swipe=(m,mine)=>({
-    onTouchStart:e=>{const t=e.touches[0];swRef.current={x:t.clientX,y:t.clientY,lock:null,d:0}},
+    onTouchStart:e=>{
+      if(selecting){swRef.current={};return}
+      const t=e.touches[0],o=swRef.current={x:t.clientX,y:t.clientY,lock:null,d:0,held:false,drag:false};
+      o.timer=setTimeout(()=>{if(o.lock)return;o.held=true;navigator.vibrate?.(15);openMenu(m,o.x,o.y)},500);
+    },
     onTouchMove:e=>{
-      const o=swRef.current,t=e.touches[0],dx=t.clientX-o.x,dy=t.clientY-o.y;
-      if(o.lock==null&&(Math.abs(dx)>8||Math.abs(dy)>8))o.lock=Math.abs(dx)>Math.abs(dy)*1.3?'x':'y';
+      const o=swRef.current;if(!o||o.x==null)return;
+      const t=e.touches[0],dx=t.clientX-o.x,dy=t.clientY-o.y;
+      if(o.held){
+        if(!o.drag&&Math.abs(dy)>14){o.drag=true;setMenu(null)}
+        if(o.drag){
+          const row=document.elementFromPoint(t.clientX,t.clientY)?.closest('.mrow'),ids=shown.map(x=>x.id),a=ids.indexOf(m.id),b=row?ids.indexOf(row.dataset.mid):-1;
+          if(a>=0&&b>=0)setSelIds(ids.slice(Math.min(a,b),Math.max(a,b)+1));
+        }
+        return;
+      }
+      if(o.lock==null&&(Math.abs(dx)>8||Math.abs(dy)>8)){clearTimeout(o.timer);o.lock=Math.abs(dx)>Math.abs(dy)*1.3?'x':'y'}
       if(o.lock!=='x')return;
       const dir=mine?-1:1,d=Math.max(0,Math.min(72,dx*dir)),row=e.currentTarget;
       o.d=d;row.style.transition='none';row.style.transform=`translateX(${d*dir}px)`;
       const ic=row.querySelector('.swi');if(ic)ic.style.opacity=String(Math.min(1,d/56));
     },
     onTouchEnd:e=>{
-      const o=swRef.current,row=e.currentTarget;
-      row.style.transition='transform .2s';row.style.transform='';
+      const o=swRef.current;if(!o||o.x==null)return;
+      clearTimeout(o.timer);
+      const row=e.currentTarget;row.style.transition='transform .2s';row.style.transform='';
       const ic=row.querySelector('.swi');if(ic)ic.style.opacity='0';
-      if(o.lock==='x'&&o.d>=56){navigator.vibrate?.(12);doReply(m)}
+      if(o.lock==='x'&&o.d>=56&&!o.held){navigator.vibrate?.(12);doReply(m)}
       swRef.current={};
-    }
+    },
+    onTouchCancel:()=>{clearTimeout(swRef.current?.timer);swRef.current={}}
   });
   // ---- actions ----
   const open=id=>{setReadAt(+LS('nl-read:'+me.id+':'+id)||0);setAid(id);setSide(false);setUn(u=>({...u,[id]:0}))};
@@ -385,12 +463,12 @@ function Chat({me,priv,first}){
     const {data,error}=await sb.rpc('create_group',{t:String(f.get('t')),members:ps.map(p=>p.id),ttl:+f.get('ttl')});
     if(error)return flash(error.message);setModal(null);await load();open(data);
   }
-  async function post(payload,fp){
-    const id=crypto.randomUUID(),cid=cur.id,opt=payload.t!=='react'&&payload.t!=='edit';
+  async function post(payload,fp,tc){
+    const chat=tc||cur,id=crypto.randomUUID(),cid=chat.id,opt=!tc&&payload.t!=='react'&&payload.t!=='edit';
     if(opt){plain.current.set(id,payload);setMsgs(o=>({...o,[cid]:[...(o[cid]||[]),{id,chat_id:cid,sender_id:me.id,created_at:new Date().toISOString(),expires_at:new Date(Date.now()+864e5).toISOString(),p:payload,pending:true}]}))}
     try{
       let e;
-      if(cur.kind==='temp'){const k=await C.getTempKey(cid);if(!k)throw new Error('Enter the room password first');e=await C.encryptTemp(payload,k,cid)}
+      if(chat.kind==='temp'){const k=await C.getTempKey(cid);if(!k)throw new Error('Enter the room password first');e=await C.encryptTemp(payload,k,cid)}
       else e=await C.encryptMessage(payload,mem[cid],cid);
       const {error}=await sb.from('messages').insert({id,chat_id:cid,sender_id:me.id,file_path:fp||null,...e});if(error)throw error;
     }catch(x){if(opt)setMsgs(o=>({...o,[cid]:(o[cid]||[]).filter(m=>m.id!==id)}));throw x}
@@ -432,13 +510,24 @@ function Chat({me,priv,first}){
 
   const vis=chats.filter(c=>(!c.expires_at||new Date(c.expires_at)>now)&&(tab==='all'||(tab==='unread'?unread[c.id]>0:c.kind===tab))&&(!q.trim()||title(c).toLowerCase().includes(q.trim().toLowerCase())))
     .sort((a,b)=>(pins.includes(b.id)-pins.includes(a.id))||new Date(last[b.id]?.at||0)-new Date(last[a.id]?.at||0));
-  const all=cur?(msgs[cur.id]||[]).filter(m=>keepable(cur)||new Date(m.expires_at)>Date.now()):[];
+  const all=cur?(msgs[cur.id]||[]).filter(m=>keepable(cur)||new Date(m.expires_at)>Date.now()).filter(visibleMsg).filter(m=>!hid.includes(m.id)):[];
   const reacts={},ed={},byId={};
   all.forEach(m=>{byId[m.id]=m});
   all.forEach(m=>{const p=m.p;if(!p)return;
     if(p.t==='react'&&byId[p.to]){const r=(reacts[p.to]??={});if(p.e)r[m.sender_id]=p.e;else delete r[m.sender_id]}
     else if(p.t==='edit'&&byId[p.to]?.sender_id===m.sender_id)ed[p.to]=p.text});
   const shown=all.filter(m=>m.p?.t!=='react'&&m.p?.t!=='edit').filter(m=>!find||(m.p&&((ed[m.id]??m.p.text)||m.p.name||'').toLowerCase().includes(find.toLowerCase())));
+  const picked=shown.filter(m=>selIds.includes(m.id));
+  const reactSig=JSON.stringify(Object.entries(reacts).flatMap(([id,r])=>Object.entries(Object.values(r).reduce((a,e)=>(a[e]=(a[e]||0)+1,a),{})).map(([e,n])=>[id+'|'+e,n])));
+  useEffect(()=>{
+    if(!all.length)return;
+    const cur2=Object.fromEntries(JSON.parse(reactSig)),prev=prevRx.current[aid];prevRx.current[aid]=cur2;
+    if(!prev)return;const f={};
+    for(const [k,n] of Object.entries(cur2))if(n>(prev[k]||0))f[k]=1;
+    if(Object.keys(f).length){setFresh(f);setTimeout(()=>setFresh({}),900)}
+  },[reactSig,aid]);
+  const mm=menu?.m,mmine=mm?.sender_id===me.id;
+  const ctxItems=mm?[{t:'Reply',i:IC.reply,f:()=>doReply(mm)},{t:'Forward',i:IC.fwd,f:()=>setFwd([mm])},mmine&&mm.p?.text&&!mm.p.t&&{t:'Edit',i:IC.edit,f:()=>{setEditing(mm);setTxt(ed[mm.id]??mm.p.text);taR.current?.focus()}},mm.p?.text&&{t:'Copy',i:IC.copy,f:()=>{copyText(ed[mm.id]??mm.p.text);flash('Copied')}},{t:'Select',i:IC.select,f:()=>setSelIds([mm.id])},{t:mmine?'Delete':'Delete for me',i:IC.trash,danger:true,f:()=>deleteMsgs([mm])}]:[];
 
   return <div className={'app'+(side?' open':'')}>
     <nav className="rail"><img src="/logo.png" width="42" height="42" alt="NexLink.Chat"/>
@@ -462,24 +551,32 @@ function Chat({me,priv,first}){
       </div>
     </aside>
     <main onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();const f=e.dataTransfer.files[0];if(f&&cur&&!(cur.kind==='temp'&&!keyed))sendFile(f)}}>{cur?<>
+      {selecting&&<header className="selbar"><button className="ic" aria-label="Cancel selection" onClick={clearSel}>✕</button><b className="grow">{grantFor?`Select messages to share with ${grantFor.name}`:`${selIds.length} selected`}</b>
+        {grantFor?<button className="sm" disabled={!selIds.length} onClick={shareHistory}>Share ({selIds.length})</button>:<>
+          <button className="ic" aria-label="Forward" title="Forward" disabled={!selIds.length} onClick={()=>setFwd(picked)}><Ic d={IC.fwd}/></button>
+          <button className="ic" aria-label="Copy" title="Copy" disabled={!selIds.length} onClick={()=>{copyText(fmtMsgs(picked));flash('Copied');clearSel()}}><Ic d={IC.copy}/></button>
+          <button className="ic" aria-label="Delete" title="Delete" disabled={!selIds.length} onClick={()=>deleteMsgs(picked)}><Ic d={IC.trash}/></button></>}</header>}
       <header><button className="ic back" aria-label="Back" onClick={()=>setSide(true)}><Ic d={IC.back}/></button><span className="clk" onClick={openHead}><Av n={title(cur)} src={pic(cur)}/></span>
         <div className="grow clk" onClick={openHead}><b>{title(cur)}</b><span className={'mute'+(cur.kind==='temp'&&new Date(cur.expires_at)-now<600000?' warn':'')}>{cur.kind==='temp'?`Code ${cur.code.slice(0,4)}-${cur.code.slice(4)} · ${left(cur)} · ${(mem[cur.id]||[]).length} people`:cur.kind==='dm'?'End-to-end encrypted':`${(mem[cur.id]||[]).length} members`}</span></div>
-        <Menu label="Chat options" items={[cur.kind==='temp'&&{t:'Copy invite',i:IC.copy,f:()=>{navigator.clipboard?.writeText(`Join my NexLink.Chat temp room\nCode: ${cur.code.slice(0,4)}-${cur.code.slice(4)}\n${location.origin}\n(Ask me for the password)`);flash('Invite copied')}},{t:pins.includes(cur.id)?'Unpin chat':'Pin chat',i:IC.pin,f:()=>togglePin(cur.id)},{t:muted.includes(cur.id)?'Unmute notifications':'Mute notifications',i:IC.bell,f:()=>toggleMute(cur.id)},cur.kind==='group'&&{t:'Group info & members',i:IC.users,f:()=>setModal('i')},{t:'Search in chat',i:IC.search,f:()=>setFind('')},cur.kind==='group'&&{t:'Change group photo',i:IC.camera,f:()=>grpR.current.click()},cur.kind!=='temp'&&{t:'Disappearing messages',i:IC.timer,f:()=>setModal('d')},cur.kind==='dm'&&{t:'Verify safety number',i:IC.shield,f:verify},cur.kind!=='dm'&&{t:cur.kind==='temp'?'Leave room':'Leave group',i:IC.out,danger:true,f:leave}]}/></header>
+        <Menu label="Chat options" items={[cur.kind==='temp'&&{t:'Copy invite',i:IC.copy,f:()=>{navigator.clipboard?.writeText(`Join my NexLink.Chat temp room\nCode: ${cur.code.slice(0,4)}-${cur.code.slice(4)}\n${location.origin}\n(Ask me for the password)`);flash('Invite copied')}},{t:pins.includes(cur.id)?'Unpin chat':'Pin chat',i:IC.pin,f:()=>togglePin(cur.id)},{t:muted.includes(cur.id)?'Unmute notifications':'Mute notifications',i:IC.bell,f:()=>toggleMute(cur.id)},cur.kind==='group'&&{t:'Group info & members',i:IC.users,f:()=>setModal('i')},{t:'Search in chat',i:IC.search,f:()=>setFind('')},cur.kind==='group'&&{t:'Change group photo',i:IC.camera,f:()=>grpR.current.click()},cur.kind!=='temp'&&{t:'Disappearing messages',i:IC.timer,f:()=>setModal('d')},cur.kind==='dm'&&{t:'Verify safety number',i:IC.shield,f:verify},{t:'Select messages',i:IC.select,f:()=>setSelMode(true)},cur.kind!=='temp'&&clr[cur.id]&&{t:'Request chat history',i:IC.hist,f:reqHistory},cur.kind!=='temp'&&{t:'Clear chat',i:IC.trash,f:clearChat},cur.kind!=='dm'&&{t:cur.kind==='temp'?'Leave room':'Leave group',i:IC.out,danger:true,f:leave}]}/></header>
       <input ref={grpR} type="file" accept="image/*" hidden onChange={e=>{setGrpPic(e.target.files[0]);e.target.value=''}}/>
       {find!=null&&<div className="findbar"><input autoFocus value={find} onChange={e=>setFind(e.target.value)} placeholder="Search in this chat" aria-label="Search in this chat"/><button className="ic" aria-label="Close search" onClick={()=>setFind(null)}>✕</button></div>}
-      <div className="msgs" ref={boxR} onScroll={e=>{const b=e.currentTarget;setAtBottom(b.scrollHeight-b.scrollTop-b.clientHeight<200)}}>
+      <div className={'msgs'+(selecting?' sel':'')} ref={boxR} onMouseDown={startDrag} onScroll={e=>{const b=e.currentTarget;setAtBottom(b.scrollHeight-b.scrollTop-b.clientHeight<200)}}>
         {!shown.length&&<p className="mute" style={{margin:'auto'}}>No messages yet. Say hello.</p>}
         {shown.map((m,i)=>{const pv=shown[i-1],d=new Date(m.created_at),head=!pv||pv.sender_id!==m.sender_id||d-new Date(pv.created_at)>300000,newDay=!pv||new Date(pv.created_at).toDateString()!==d.toDateString(),mine=m.sender_id===me.id,sp=(mem[cur.id]||[]).find(p=>p.id===m.sender_id),sn=nm(sp),firstNew=readAt>0&&!mine&&d>readAt&&(!pv||new Date(pv.created_at)<=readAt);
+          if(m.p?.t==='hreq'||m.p?.t==='hgrant')return <div key={m.id} className="sysmsg">{m.p.t==='hreq'?(mine?'You asked for the chat history.':<>{sn} asked for the chat history from before they cleared this chat. <button onClick={()=>{setGrantFor({u:m.sender_id,name:sn});setSelMode(true);setSelIds([]);flash('Select the first and last message you want to share')}}>Share…</button></>):<>{sn} shared chat history with {m.p.to===me.id?'you':nm((mem[cur.id]||[]).find(p=>p.id===m.p.to))}.</>}</div>;
           return <div key={m.id} style={{display:'contents'}}>
             {newDay&&<div className="day">{d.toLocaleDateString([],{weekday:'long',day:'numeric',month:'short'})}</div>}
             {firstNew&&<div className="newdiv"><span>New messages</span></div>}
-            <div className={'mrow'+(mine?' mine':'')} {...swipe(m,mine)}><span className="swi" aria-hidden="true"><Ic d={IC.reply} s={16}/></span>{!mine&&(head?<button className="avb" onClick={()=>openProfile(sp)} aria-label={'Open '+sn+' profile'}><Av n={sn} src={sp?.avatar}/></button>:<span className="avs"/>)}<div id={'m-'+m.id} className={'b'+(mine?' me':'')+(head?' first':'')+(m.pending?' pending':'')} onClick={e=>{if(!e.target.closest('a,button,img,i'))setSel(sel===m.id?null:m.id)}} onPointerDown={e=>{ptrRef.current=e.pointerType}} onDoubleClick={()=>{if(ptrRef.current!=='mouse')return;window.getSelection()?.removeAllRanges();doReply(m)}}>
-              {cur.kind!=='dm'&&!mine&&head&&<i className="who" onClick={e=>{e.stopPropagation();openProfile(sp)}} style={{color:`hsl(${hue(m.sender_id)} 75% 45%)`}}>{sn}</i>}
+            <div className={'mrow'+(mine?' mine':'')+(selIds.includes(m.id)?' picked':'')} data-mid={m.id} onClick={()=>{if(dragMoved.current)return;if(selecting)togglePick(m.id)}} {...swipe(m,mine)}>{selecting&&<span className={'chk'+(selIds.includes(m.id)?' on':'')} aria-hidden="true"/>}<span className="swi" aria-hidden="true"><Ic d={IC.reply} s={16}/></span>{!mine&&(head?<button className="avb" onClick={e=>{if(!selecting){e.stopPropagation();openProfile(sp)}}} aria-label={'Open '+sn+' profile'}><Av n={sn} src={sp?.avatar}/></button>:<span className="avs"/>)}<div id={'m-'+m.id} className={'b'+(mine?' me':'')+(head?' first':'')+(m.pending?' pending':'')} onContextMenu={e=>{e.preventDefault();openMenu(m,e.clientX,e.clientY)}} onPointerDown={e=>{ptrRef.current=e.pointerType}} onDoubleClick={()=>{if(ptrRef.current!=='mouse')return;window.getSelection()?.removeAllRanges();doReply(m)}}>
+              {cur.kind!=='dm'&&!mine&&head&&<i className="who" onClick={e=>{if(!selecting){e.stopPropagation();openProfile(sp)}}} style={{color:`hsl(${hue(m.sender_id)} 75% 45%)`}}>{sn}</i>}
+              {m.p?.fwd&&<small className="fwdl">↪ Forwarded</small>}
               {m.p?.re&&<div className="quote" onClick={()=>jump(m.p.re.id)}><b>{m.p.re.n}</b><span>{m.p.re.t}</span></div>}
               {m.p?(m.p.t==='file'?<FileMsg p={m.p}/>:<Linkify text={ed[m.id]??m.p.text}/>):<em>Can’t decrypt on this device</em>}{ed[m.id]!=null&&<small className="edited"> (edited)</small>}
-              {reacts[m.id]&&Object.keys(reacts[m.id]).length>0&&<div className="chipsr">{Object.entries(Object.values(reacts[m.id]).reduce((a,e)=>(a[e]=(a[e]||0)+1,a),{})).map(([e,n])=><button key={e} className={'rx'+(reacts[m.id][me.id]===e?' mine':'')} onClick={()=>react(m,e)}>{e} {n}</button>)}</div>}
+              {reacts[m.id]&&Object.keys(reacts[m.id]).length>0&&<div className="chipsr">{Object.entries(Object.values(reacts[m.id]).reduce((a,e)=>(a[e]=(a[e]||0)+1,a),{})).map(([e,n])=><button key={e} className={'rx'+(reacts[m.id][me.id]===e?' mine':'')+(fresh[m.id+'|'+e]?' pop':'')} onClick={()=>react(m,e)}>{e} {n}</button>)}</div>}
+              {burst?.id===m.id&&<span key={burst.k} className="burst">{burst.e}</span>}
               <time>{m.pending?'sending…':d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</time>
-              {sel===m.id&&<div className="acts">{['👍','❤️','😂','😮','😢','🙏'].map(e=><button key={e} onClick={()=>{react(m,e);setSel(null)}}>{e}</button>)}<button onClick={()=>{setReplyTo({id:m.id,n:sn,t:snip(m)});setSel(null);taR.current?.focus()}}>Reply</button>{m.p?.text&&<button onClick={()=>{navigator.clipboard?.writeText(m.p.text);flash('Copied');setSel(null)}}>Copy</button>}{mine&&m.p?.text&&<button onClick={()=>{setEditing(m);setTxt(ed[m.id]??m.p.text);setSel(null);taR.current?.focus()}}>Edit</button>}{mine&&<button onClick={()=>del(m)}>Delete</button>}</div>}</div><div className="hov"><button aria-label="React" title="React" onClick={()=>setSel(m.id)}><Ic d={IC.smile} s={16}/></button><button aria-label="Reply" title="Reply" onClick={()=>doReply(m)}><Ic d={IC.reply} s={16}/></button></div></div></div>})}
+              </div><div className="hov"><button aria-label="React" title="React" onClick={()=>react(m,'❤️')} onMouseEnter={e=>{clearTimeout(rxT.current);const r=e.currentTarget.getBoundingClientRect();setRxp({m,x:r.left+r.width/2,y:r.top})}} onMouseLeave={()=>{rxT.current=setTimeout(()=>setRxp(null),250)}}><Ic d={IC.smile} s={16}/></button><button aria-label="Reply" title="Reply" onClick={()=>doReply(m)}><Ic d={IC.reply} s={16}/></button><button aria-label="More" title="More" onClick={e=>{const r=e.currentTarget.getBoundingClientRect();openMenu(m,r.left,r.bottom+4)}}><Ic d={IC.more} s={16}/></button></div></div></div>})}
         <div ref={endR}/>
       </div>
       {!atBottom&&<button className="jump" aria-label="Scroll to latest" onClick={()=>endR.current?.scrollIntoView({behavior:'smooth',block:'end'})}>↓</button>}
@@ -538,6 +635,16 @@ function Chat({me,priv,first}){
     {modal?.sn&&<div className="modal" onClick={()=>setModal(null)}><div className="card" onClick={e=>e.stopPropagation()}>
       <b>Safety number with {modal.n}</b><p className="mute">Compare these numbers on a call. If both match, nobody is intercepting your chat.</p>
       <code style={{whiteSpace:'pre'}}>{modal.sn}</code><button onClick={()=>setModal(null)}>Close</button></div></div>}
+    {rxp&&<div className="rxpick" style={{left:Math.max(8,Math.min(rxp.x-110,window.innerWidth-236)),top:Math.max(8,rxp.y-50)}} onMouseEnter={()=>clearTimeout(rxT.current)} onMouseLeave={()=>{rxT.current=setTimeout(()=>setRxp(null),250)}}>{REACTS.map(e=><button key={e} aria-label={'React '+e} onClick={()=>{react(rxp.m,e);setRxp(null)}}>{e}</button>)}</div>}
+    {menu&&<div className="ctxwrap" onClick={()=>setMenu(null)} onContextMenu={e=>{e.preventDefault();setMenu(null)}}>
+      <div className="ctx" role="menu" style={{left:Math.max(8,Math.min(menu.x,window.innerWidth-240)),top:Math.max(8,Math.min(menu.y,window.innerHeight-340))}} onClick={e=>e.stopPropagation()}>
+        <div className="ctxr">{REACTS.map(e=><button key={e} aria-label={'React '+e} onClick={()=>{react(menu.m,e);setMenu(null)}}>{e}</button>)}</div>
+        {ctxItems.filter(Boolean).map(it=><button key={it.t} role="menuitem" className={'mi'+(it.danger?' danger':'')} onClick={()=>{setMenu(null);it.f()}}><Ic d={it.i} s={18}/>{it.t}</button>)}</div></div>}
+    {fwd&&<div className="modal" onClick={()=>{setFwd(null);setFq('')}}><div className="card" onClick={e=>e.stopPropagation()}>
+      <b>Forward {fwd.length>1?fwd.length+' messages':'message'} to…</b>
+      <input value={fq} onChange={e=>setFq(e.target.value)} placeholder="Search chats" aria-label="Search chats" autoFocus/>
+      <div className="fwdlist">{chats.filter(c=>(!c.expires_at||new Date(c.expires_at)>now)&&title(c).toLowerCase().includes(fq.trim().toLowerCase())).map(c=><div key={c.id} className="row" onClick={()=>forwardTo(c)}><Av n={title(c)} src={pic(c)}/><div className="grow"><b>{title(c)}</b></div></div>)}</div>
+      <button className="alt" onClick={()=>{setFwd(null);setFq('')}}>Cancel</button></div></div>}
     {lb&&<div className="modal" onClick={()=>setLb(null)}><img src={lb} alt="" className="lbimg"/></div>}
     {toast&&<div className={'toast'+(/fail|error|cannot|can’t|wrong|not allowed|too large|limit|blocked|no user/i.test(toast)?' bad':'')} role="status">{toast}</div>}
   </div>;

@@ -49,3 +49,6 @@ Run `supabase/migration-v6.sql` once in the SQL Editor (adds add_member / remove
 1. Run `supabase/migration-v7.sql` once.
 2. Generate push keys on your PC: `npx web-push generate-vapid-keys`. Add to Vercel: `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (public key), `VAPID_PRIVATE_KEY` (private key, server only), `VAPID_SUBJECT` (`mailto:your@email`). Redeploy.
 3. In the app: Settings > Turn on background notifications (per device). On iPhone the app must be added to the Home Screen first.
+
+## v8 (context menu, bulk select, forward, clear chat, history requests)
+Run `supabase/migration-v8.sql` once. It adds per-user "clear chat" and shared-history grants, and changes who can read old messages. If everyone clears a chat, the messages are deleted for good (files in the bucket are removed by the lifecycle rule).
