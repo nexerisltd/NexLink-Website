@@ -153,3 +153,6 @@ code{font-size:17px;line-height:1.8;letter-spacing:.04em;word-spacing:8px;backgr
 .msgs.sel .mrow.mine{justify-content:flex-start}
 .mrow.picked{background:var(--rowon);border-radius:14px}
 @media(hover:none){.b{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}}
+.b.held{outline:2px solid var(--acc);outline-offset:2px}
+@media(hover:none){.ctxwrap{background:rgba(0,0,0,.28)}}
+.older{align-self:center;margin:6px}

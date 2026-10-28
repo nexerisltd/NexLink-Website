@@ -185,10 +185,10 @@ const urlB64=s=>{const b=(s+'='.repeat((4-s.length%4)%4)).replace(/-/g,'+').repl
 function Chat({me,priv,first}){
   const [chats,setChats]=useState([]),[mem,setMem]=useState({}),[msgs,setMsgs]=useState({}),[aid,setAid]=useState(null),[unread,setUn]=useState({}),[last,setLast]=useState({});
   const [q,setQ]=useState(''),[hits,setHits]=useState([]),[txt,setTxt]=useState(''),[modal,setModal]=useState(null),[side,setSide]=useState(true),[live,setLive]=useState(true);
-  const [ver,setVer]=useState(0),[now,setNow]=useState(Date.now()),[unlock,setUnlock]=useState(''),[keyed,setKeyed]=useState(true),[tab,setTab]=useState('all'),[toast,setToast]=useState(''),[emo,setEmo]=useState(false),[prof,setProf]=useState(me),[sel,setSel]=useState(null),[replyTo,setReplyTo]=useState(null),[find,setFind]=useState(null),[lb,setLb]=useState(null),[editing,setEditing]=useState(null),[atBottom,setAtBottom]=useState(true),[pview,setPview]=useState(null),[menu,setMenu]=useState(null),[rxp,setRxp]=useState(null),[selIds,setSelIds]=useState([]),[selMode,setSelMode]=useState(false),[grantFor,setGrantFor]=useState(null),[fwd,setFwd]=useState(null),[fq,setFq]=useState(''),[clr,setClr]=useState({}),[grants,setGrants]=useState({}),[hid,setHid]=useState(()=>JSON.parse(LS('nl-hide:'+me.id)||'[]')),[fresh,setFresh]=useState({}),[burst,setBurst]=useState(null),[loaded,setLoaded]=useState(false),[readAt,setReadAt]=useState(0),[muted,setMuted]=useState(()=>JSON.parse(LS('nl-mute:'+me.id)||'[]')),[pins,setPins]=useState(()=>JSON.parse(LS('nl-pin:'+me.id)||'[]')),[pushOn,setPushOn]=useState(LS('nl-push:'+me.id)==='1');
+  const [ver,setVer]=useState(0),[now,setNow]=useState(Date.now()),[unlock,setUnlock]=useState(''),[keyed,setKeyed]=useState(true),[tab,setTab]=useState('all'),[toast,setToast]=useState(''),[emo,setEmo]=useState(false),[prof,setProf]=useState(me),[sel,setSel]=useState(null),[replyTo,setReplyTo]=useState(null),[find,setFind]=useState(null),[lb,setLb]=useState(null),[editing,setEditing]=useState(null),[atBottom,setAtBottom]=useState(true),[pview,setPview]=useState(null),[menu,setMenu]=useState(null),[rxp,setRxp]=useState(null),[selIds,setSelIds]=useState([]),[selMode,setSelMode]=useState(false),[grantFor,setGrantFor]=useState(null),[fwd,setFwd]=useState(null),[fq,setFq]=useState(''),[clr,setClr]=useState({}),[grants,setGrants]=useState({}),[hid,setHid]=useState(()=>JSON.parse(LS('nl-hide:'+me.id)||'[]')),[fresh,setFresh]=useState({}),[burst,setBurst]=useState(null),[lim,setLim]=useState(300),[loaded,setLoaded]=useState(false),[readAt,setReadAt]=useState(0),[muted,setMuted]=useState(()=>JSON.parse(LS('nl-mute:'+me.id)||'[]')),[pins,setPins]=useState(()=>JSON.parse(LS('nl-pin:'+me.id)||'[]')),[pushOn,setPushOn]=useState(LS('nl-push:'+me.id)==='1');
   const [bk,setBk]=useState(()=>({auto:LS('nl-auto:'+me.id)==='1',at:+LS('nl-last:'+me.id)||0,msg:'',busy:false,pass:'',stale:false}));
   const upd=p=>setBk(b=>({...b,...p}));
-  const plain=useRef(new Map()),aidR=useRef(null),endR=useRef(null),taR=useRef(null),chatsR=useRef([]),fileR=useRef(null),grpR=useRef(null),lastDone=useRef(new Set()),boxR=useRef(null),mutedR=useRef([]),searchR=useRef(null),swRef=useRef({}),ptrRef=useRef('mouse'),rxT=useRef(null),dragMoved=useRef(false),prevRx=useRef({});
+  const plain=useRef(new Map()),aidR=useRef(null),endR=useRef(null),taR=useRef(null),chatsR=useRef([]),fileR=useRef(null),grpR=useRef(null),lastDone=useRef(new Set()),boxR=useRef(null),mutedR=useRef([]),searchR=useRef(null),swRef=useRef({}),ptrRef=useRef('mouse'),rxT=useRef(null),dragMoved=useRef(false),prevRx=useRef({}),menuAt=useRef(0),drafts=useRef({});
   aidR.current=aid;chatsR.current=chats;mutedR.current=muted;
   const flash=m=>{setToast(m);setTimeout(()=>setToast(''),3500)};
   const cur=chats.find(c=>c.id===aid&&(!c.expires_at||new Date(c.expires_at)>Date.now()));
@@ -256,13 +256,13 @@ function Chat({me,priv,first}){
     if(!aid||!live)return;let off=false;
     (async()=>{
       const c=chatsR.current.find(x=>x.id===aid);let rows;
-      if(c&&keepable(c)){const gk='nl-gs:'+me.id+':'+aid,full=+LS(gk)!==gcount;await syncChat(aid,full);if(full)LS(gk,String(gcount));rows=(await A.byChat(me.id,aid)).slice(-300)}
+      if(c&&keepable(c)){const gk='nl-gs:'+me.id+':'+aid,full=+LS(gk)!==gcount;await syncChat(aid,full);if(full)LS(gk,String(gcount));rows=(await A.byChat(me.id,aid)).slice(-lim)}
       else{const {data}=await sb.from('messages').select('*').eq('chat_id',aid).order('created_at',{ascending:false}).limit(80);rows=(data||[]).reverse()}
       const x=await Promise.all(rows.map(dec));
       if(!off)setMsgs(o=>({...o,[aid]:x}));
     })();
     return()=>{off=true};
-  },[aid,live,dec,ver,gcount]);
+  },[aid,live,dec,ver,gcount,lim]);
   useEffect(()=>{
     const b=boxR.current;if(!b)return;
     const near=b.scrollHeight-b.scrollTop-b.clientHeight<160,mine=(msgs[aid]||[]).slice(-1)[0]?.sender_id===me.id;
@@ -360,11 +360,17 @@ function Chat({me,priv,first}){
     setPview({...p,sn});
   }
   const openHead=()=>!cur?null:cur.kind==='dm'?openProfile(other(cur)):cur.kind==='group'?setModal('i'):null;
-  const openMenu=(m,x,y)=>{if(m.pending)return;setRxp(null);setMenu({m,x,y})};
+  const openMenu=(m,x,y,touch)=>{
+    if(m.pending)return;setRxp(null);menuAt.current=Date.now();
+    if(touch){const r=document.getElementById('m-'+m.id)?.getBoundingClientRect();
+      if(r){x=m.sender_id===me.id?r.right-230:r.left;y=r.bottom+8;if(y+340>window.innerHeight)y=Math.max(8,r.top-348)}}
+    setMenu({m,x,y});
+  };
   const copyText=t=>navigator.clipboard?.writeText(t);
   const togglePick=id=>setSelIds(a=>a.includes(id)?a.filter(x=>x!==id):[...a,id]);
   const clearSel=()=>{setSelIds([]);setSelMode(false);setGrantFor(null)};
-  useEffect(()=>{setSelIds([]);setSelMode(false);setGrantFor(null);setMenu(null);setRxp(null)},[aid]);
+  useEffect(()=>{setSelIds([]);setSelMode(false);setGrantFor(null);setMenu(null);setRxp(null);setReplyTo(null);setEditing(null);setLim(300);setTxt(drafts.current[aid]||'')},[aid]);
+  useEffect(()=>{const f=()=>setSide(true);window.addEventListener('popstate',f);return()=>window.removeEventListener('popstate',f)},[]);
   useEffect(()=>{const b=boxR.current;if(!b)return;const f=e=>{if(swRef.current?.held)e.preventDefault()};b.addEventListener('touchmove',f,{passive:false});return()=>b.removeEventListener('touchmove',f)},[aid,!!cur]);
   // "Name: text" lines, replies as: Name: Replied on "quote" text
   const fmtMsgs=list=>[...list].sort((a,b)=>new Date(a.created_at)-new Date(b.created_at)).filter(m=>m.p&&m.p.t!=='hreq'&&m.p.t!=='hgrant').map(m=>{
@@ -423,7 +429,7 @@ function Chat({me,priv,first}){
     onTouchStart:e=>{
       if(selecting){swRef.current={};return}
       const t=e.touches[0],o=swRef.current={x:t.clientX,y:t.clientY,lock:null,d:0,held:false,drag:false};
-      o.timer=setTimeout(()=>{if(o.lock)return;o.held=true;navigator.vibrate?.(15);openMenu(m,o.x,o.y)},500);
+      o.timer=setTimeout(()=>{if(o.lock)return;o.held=true;navigator.vibrate?.(15);openMenu(m,o.x,o.y,true)},500);
     },
     onTouchMove:e=>{
       const o=swRef.current;if(!o||o.x==null)return;
@@ -453,7 +459,7 @@ function Chat({me,priv,first}){
     onTouchCancel:()=>{clearTimeout(swRef.current?.timer);swRef.current={}}
   });
   // ---- actions ----
-  const open=id=>{setReadAt(+LS('nl-read:'+me.id+':'+id)||0);setAid(id);setSide(false);setUn(u=>({...u,[id]:0}))};
+  const open=id=>{if(window.innerWidth<=760&&!history.state?.chat)history.pushState({chat:id},'');setReadAt(+LS('nl-read:'+me.id+':'+id)||0);setAid(id);setSide(false);setUn(u=>({...u,[id]:0}))};
   async function dm(u){const {data,error}=await sb.rpc('create_dm',{other:u.id});if(error)return flash(error.message);setQ('');await load();open(data)}
   async function group(ev){
     ev.preventDefault();const f=new FormData(ev.target);
@@ -476,7 +482,7 @@ function Chat({me,priv,first}){
     if(payload.t!=='react'&&payload.t!=='edit')api('/api/push',{chatId:cid}).catch(()=>{});
   }
   async function send(ev){
-    ev.preventDefault();const t=txt.trim();if(!t||!cur)return;setTxt('');setEmo(false);
+    ev.preventDefault();const t=txt.trim();if(!t||!cur)return;setTxt('');drafts.current[cur.id]='';setEmo(false);
     if('Notification' in window&&Notification.permission==='default')Notification.requestPermission();
     const re=replyTo,ed0=editing;try{await post(ed0?{t:'edit',to:ed0.id,text:t}:re?{text:t,re}:{text:t});setReplyTo(null);setEditing(null)}catch(x){setTxt(t);flash(x.message)}
   }
@@ -556,19 +562,20 @@ function Chat({me,priv,first}){
           <button className="ic" aria-label="Forward" title="Forward" disabled={!selIds.length} onClick={()=>setFwd(picked)}><Ic d={IC.fwd}/></button>
           <button className="ic" aria-label="Copy" title="Copy" disabled={!selIds.length} onClick={()=>{copyText(fmtMsgs(picked));flash('Copied');clearSel()}}><Ic d={IC.copy}/></button>
           <button className="ic" aria-label="Delete" title="Delete" disabled={!selIds.length} onClick={()=>deleteMsgs(picked)}><Ic d={IC.trash}/></button></>}</header>}
-      <header><button className="ic back" aria-label="Back" onClick={()=>setSide(true)}><Ic d={IC.back}/></button><span className="clk" onClick={openHead}><Av n={title(cur)} src={pic(cur)}/></span>
+      <header><button className="ic back" aria-label="Back" onClick={()=>history.state?.chat?history.back():setSide(true)}><Ic d={IC.back}/></button><span className="clk" onClick={openHead}><Av n={title(cur)} src={pic(cur)}/></span>
         <div className="grow clk" onClick={openHead}><b>{title(cur)}</b><span className={'mute'+(cur.kind==='temp'&&new Date(cur.expires_at)-now<600000?' warn':'')}>{cur.kind==='temp'?`Code ${cur.code.slice(0,4)}-${cur.code.slice(4)} · ${left(cur)} · ${(mem[cur.id]||[]).length} people`:cur.kind==='dm'?'End-to-end encrypted':`${(mem[cur.id]||[]).length} members`}</span></div>
         <Menu label="Chat options" items={[cur.kind==='temp'&&{t:'Copy invite',i:IC.copy,f:()=>{navigator.clipboard?.writeText(`Join my NexLink.Chat temp room\nCode: ${cur.code.slice(0,4)}-${cur.code.slice(4)}\n${location.origin}\n(Ask me for the password)`);flash('Invite copied')}},{t:pins.includes(cur.id)?'Unpin chat':'Pin chat',i:IC.pin,f:()=>togglePin(cur.id)},{t:muted.includes(cur.id)?'Unmute notifications':'Mute notifications',i:IC.bell,f:()=>toggleMute(cur.id)},cur.kind==='group'&&{t:'Group info & members',i:IC.users,f:()=>setModal('i')},{t:'Search in chat',i:IC.search,f:()=>setFind('')},cur.kind==='group'&&{t:'Change group photo',i:IC.camera,f:()=>grpR.current.click()},cur.kind!=='temp'&&{t:'Disappearing messages',i:IC.timer,f:()=>setModal('d')},cur.kind==='dm'&&{t:'Verify safety number',i:IC.shield,f:verify},{t:'Select messages',i:IC.select,f:()=>setSelMode(true)},cur.kind!=='temp'&&clr[cur.id]&&{t:'Request chat history',i:IC.hist,f:reqHistory},cur.kind!=='temp'&&{t:'Clear chat',i:IC.trash,f:clearChat},cur.kind!=='dm'&&{t:cur.kind==='temp'?'Leave room':'Leave group',i:IC.out,danger:true,f:leave}]}/></header>
       <input ref={grpR} type="file" accept="image/*" hidden onChange={e=>{setGrpPic(e.target.files[0]);e.target.value=''}}/>
       {find!=null&&<div className="findbar"><input autoFocus value={find} onChange={e=>setFind(e.target.value)} placeholder="Search in this chat" aria-label="Search in this chat"/><button className="ic" aria-label="Close search" onClick={()=>setFind(null)}>✕</button></div>}
       <div className={'msgs'+(selecting?' sel':'')} ref={boxR} onMouseDown={startDrag} onScroll={e=>{const b=e.currentTarget;setAtBottom(b.scrollHeight-b.scrollTop-b.clientHeight<200)}}>
+        {cur&&keepable(cur)&&(msgs[cur.id]||[]).length>=lim&&<button className="alt sm older" onClick={()=>setLim(l=>l+300)}>Load older messages</button>}
         {!shown.length&&<p className="mute" style={{margin:'auto'}}>No messages yet. Say hello.</p>}
         {shown.map((m,i)=>{const pv=shown[i-1],d=new Date(m.created_at),head=!pv||pv.sender_id!==m.sender_id||d-new Date(pv.created_at)>300000,newDay=!pv||new Date(pv.created_at).toDateString()!==d.toDateString(),mine=m.sender_id===me.id,sp=(mem[cur.id]||[]).find(p=>p.id===m.sender_id),sn=nm(sp),firstNew=readAt>0&&!mine&&d>readAt&&(!pv||new Date(pv.created_at)<=readAt);
           if(m.p?.t==='hreq'||m.p?.t==='hgrant')return <div key={m.id} className="sysmsg">{m.p.t==='hreq'?(mine?'You asked for the chat history.':<>{sn} asked for the chat history from before they cleared this chat. <button onClick={()=>{setGrantFor({u:m.sender_id,name:sn});setSelMode(true);setSelIds([]);flash('Select the first and last message you want to share')}}>Share…</button></>):<>{sn} shared chat history with {m.p.to===me.id?'you':nm((mem[cur.id]||[]).find(p=>p.id===m.p.to))}.</>}</div>;
           return <div key={m.id} style={{display:'contents'}}>
             {newDay&&<div className="day">{d.toLocaleDateString([],{weekday:'long',day:'numeric',month:'short'})}</div>}
             {firstNew&&<div className="newdiv"><span>New messages</span></div>}
-            <div className={'mrow'+(mine?' mine':'')+(selIds.includes(m.id)?' picked':'')} data-mid={m.id} onClick={()=>{if(dragMoved.current)return;if(selecting)togglePick(m.id)}} {...swipe(m,mine)}>{selecting&&<span className={'chk'+(selIds.includes(m.id)?' on':'')} aria-hidden="true"/>}<span className="swi" aria-hidden="true"><Ic d={IC.reply} s={16}/></span>{!mine&&(head?<button className="avb" onClick={e=>{if(!selecting){e.stopPropagation();openProfile(sp)}}} aria-label={'Open '+sn+' profile'}><Av n={sn} src={sp?.avatar}/></button>:<span className="avs"/>)}<div id={'m-'+m.id} className={'b'+(mine?' me':'')+(head?' first':'')+(m.pending?' pending':'')} onContextMenu={e=>{e.preventDefault();openMenu(m,e.clientX,e.clientY)}} onPointerDown={e=>{ptrRef.current=e.pointerType}} onDoubleClick={()=>{if(ptrRef.current!=='mouse')return;window.getSelection()?.removeAllRanges();doReply(m)}}>
+            <div className={'mrow'+(mine?' mine':'')+(selIds.includes(m.id)?' picked':'')} data-mid={m.id} onClick={()=>{if(dragMoved.current)return;if(selecting)togglePick(m.id)}} {...swipe(m,mine)}>{selecting&&<span className={'chk'+(selIds.includes(m.id)?' on':'')} aria-hidden="true"/>}<span className="swi" aria-hidden="true"><Ic d={IC.reply} s={16}/></span>{!mine&&(head?<button className="avb" onClick={e=>{if(!selecting){e.stopPropagation();openProfile(sp)}}} aria-label={'Open '+sn+' profile'}><Av n={sn} src={sp?.avatar}/></button>:<span className="avs"/>)}<div id={'m-'+m.id} className={'b'+(mine?' me':'')+(head?' first':'')+(m.pending?' pending':'')+(menu?.m.id===m.id?' held':'')} onContextMenu={e=>{e.preventDefault();openMenu(m,e.clientX,e.clientY,ptrRef.current!=='mouse')}} onPointerDown={e=>{ptrRef.current=e.pointerType}} onDoubleClick={()=>{if(ptrRef.current!=='mouse')return;window.getSelection()?.removeAllRanges();doReply(m)}}>
               {cur.kind!=='dm'&&!mine&&head&&<i className="who" onClick={e=>{if(!selecting){e.stopPropagation();openProfile(sp)}}} style={{color:`hsl(${hue(m.sender_id)} 75% 45%)`}}>{sn}</i>}
               {m.p?.fwd&&<small className="fwdl">↪ Forwarded</small>}
               {m.p?.re&&<div className="quote" onClick={()=>jump(m.p.re.id)}><b>{m.p.re.n}</b><span>{m.p.re.t}</span></div>}
@@ -585,7 +592,7 @@ function Chat({me,priv,first}){
       <form className="send" onSubmit={send}>
         <input ref={fileR} type="file" hidden onChange={e=>{sendFile(e.target.files[0]);e.target.value=''}}/>
         <button type="button" className="ic" aria-label="Attach a file" onClick={()=>fileR.current.click()}><Ic d={IC.clip}/></button>
-        <textarea ref={taR} rows={1} value={txt} aria-label="Message" placeholder="Type a message…" maxLength={4000} onPaste={e=>{const f=e.clipboardData.files[0];if(f){e.preventDefault();sendFile(f)}}} onChange={e=>setTxt(e.target.value)} onInput={e=>{e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,140)+'px'}} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();send(e)}}}/>
+        <textarea ref={taR} rows={1} value={txt} aria-label="Message" placeholder="Type a message…" maxLength={4000} onPaste={e=>{const f=e.clipboardData.files[0];if(f){e.preventDefault();sendFile(f)}}} onChange={e=>{setTxt(e.target.value);drafts.current[aid]=e.target.value}} onInput={e=>{e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,140)+'px'}} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();send(e)}}}/>
         <div className="menu"><button type="button" className="ic" aria-label="Emoji" onClick={()=>setEmo(!emo)}><Ic d={IC.smile}/></button>
           {emo&&<div className="pop emo">{EMOJI.map(e=><button type="button" key={e} className="mi" onClick={()=>{setTxt(t=>t+e);setEmo(false)}}>{e}</button>)}</div>}</div>
         <button className="sendbtn" aria-label="Send" disabled={!txt.trim()}><Ic d={IC.send}/></button></form></>}
@@ -636,10 +643,10 @@ function Chat({me,priv,first}){
       <b>Safety number with {modal.n}</b><p className="mute">Compare these numbers on a call. If both match, nobody is intercepting your chat.</p>
       <code style={{whiteSpace:'pre'}}>{modal.sn}</code><button onClick={()=>setModal(null)}>Close</button></div></div>}
     {rxp&&<div className="rxpick" style={{left:Math.max(8,Math.min(rxp.x-110,window.innerWidth-236)),top:Math.max(8,rxp.y-50)}} onMouseEnter={()=>clearTimeout(rxT.current)} onMouseLeave={()=>{rxT.current=setTimeout(()=>setRxp(null),250)}}>{REACTS.map(e=><button key={e} aria-label={'React '+e} onClick={()=>{react(rxp.m,e);setRxp(null)}}>{e}</button>)}</div>}
-    {menu&&<div className="ctxwrap" onClick={()=>setMenu(null)} onContextMenu={e=>{e.preventDefault();setMenu(null)}}>
+    {menu&&<div className="ctxwrap" onClick={()=>{if(Date.now()-menuAt.current>600)setMenu(null)}} onContextMenu={e=>{e.preventDefault();if(Date.now()-menuAt.current>600)setMenu(null)}}>
       <div className="ctx" role="menu" style={{left:Math.max(8,Math.min(menu.x,window.innerWidth-240)),top:Math.max(8,Math.min(menu.y,window.innerHeight-340))}} onClick={e=>e.stopPropagation()}>
-        <div className="ctxr">{REACTS.map(e=><button key={e} aria-label={'React '+e} onClick={()=>{react(menu.m,e);setMenu(null)}}>{e}</button>)}</div>
-        {ctxItems.filter(Boolean).map(it=><button key={it.t} role="menuitem" className={'mi'+(it.danger?' danger':'')} onClick={()=>{setMenu(null);it.f()}}><Ic d={it.i} s={18}/>{it.t}</button>)}</div></div>}
+        <div className="ctxr">{REACTS.map(e=><button key={e} aria-label={'React '+e} onClick={()=>{if(Date.now()-menuAt.current<600)return;react(menu.m,e);setMenu(null)}}>{e}</button>)}</div>
+        {ctxItems.filter(Boolean).map(it=><button key={it.t} role="menuitem" className={'mi'+(it.danger?' danger':'')} onClick={()=>{if(Date.now()-menuAt.current<600)return;setMenu(null);it.f()}}><Ic d={it.i} s={18}/>{it.t}</button>)}</div></div>}
     {fwd&&<div className="modal" onClick={()=>{setFwd(null);setFq('')}}><div className="card" onClick={e=>e.stopPropagation()}>
       <b>Forward {fwd.length>1?fwd.length+' messages':'message'} to…</b>
       <input value={fq} onChange={e=>setFq(e.target.value)} placeholder="Search chats" aria-label="Search chats" autoFocus/>
