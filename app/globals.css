@@ -156,3 +156,5 @@ code{font-size:17px;line-height:1.8;letter-spacing:.04em;word-spacing:8px;backgr
 .b.held{outline:2px solid var(--acc);outline-offset:2px}
 @media(hover:none){.ctxwrap{background:rgba(0,0,0,.28)}}
 .older{align-self:center;margin:6px}
+.offline{position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:40;background:#f59e0b;color:#1f1300;padding:6px 16px;border-radius:99px;font-size:13px;font-weight:600;box-shadow:var(--shadow);max-width:92vw;text-align:center}
+.prowcard{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:10px 18px;text-align:left}

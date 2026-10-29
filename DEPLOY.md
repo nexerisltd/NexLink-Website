@@ -52,3 +52,10 @@ Run `supabase/migration-v6.sql` once in the SQL Editor (adds add_member / remove
 
 ## v8 (context menu, bulk select, forward, clear chat, history requests)
 Run `supabase/migration-v8.sql` once. It adds per-user "clear chat" and shared-history grants, and changes who can read old messages. If everyone clears a chat, the messages are deleted for good (files in the bucket are removed by the lifecycle rule).
+
+## v9 (profile links, privacy, offline, Drive without popups)
+1. Run `supabase/migration-v9.sql` once.
+2. Vercel env (server only): `GOOGLE_CLIENT_SECRET` (the same secret you gave Supabase) and `TOKEN_ENC_KEY` (generate: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`). Redeploy.
+3. Google Cloud > OAuth consent screen: scope `.../auth/drive.appdata` must be added (already needed for backup). Supabase redirect URLs must include `https://YOUR-APP/**` so `/u/username` links work after login.
+4. Existing users: Settings > Google Drive backup > "Allow Google Drive access" once. New sign-ins ask for it automatically.
+5. Profile links look like `https://YOUR-APP/u/username`.

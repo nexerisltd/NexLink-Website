@@ -26,50 +26,97 @@ function Menu({items,label,icon}){
 function toggleTheme(){const el=document.documentElement;const dark=(el.dataset.theme||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'))==='dark';const n=dark?'light':'dark';el.dataset.theme=n;try{localStorage.setItem('nl-theme',n)}catch{}}
 const Splash=({t})=><div className="center"><img className="pulse" src="/logo.png" width="96" height="96" alt=""/><p className="mute">{t||'Loading…'}</p></div>;
 
-export default function App(){
+const DRIVE_SCOPE='https://www.googleapis.com/auth/drive.appdata';
+const isMob=()=>typeof window!=='undefined'&&window.matchMedia('(max-width:760px)').matches;
+async function storeRefresh(x){
+  try{await fetch('/api/google/store',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+x.access_token},body:JSON.stringify({refresh_token:x.provider_refresh_token})})}catch{}
+}
+export default function App({startUser}){
   const [s,setS]=useState(undefined);
   useEffect(()=>{try{const t=localStorage.getItem('nl-theme');if(t)document.documentElement.dataset.theme=t;applyAccent(+localStorage.getItem('nl-accent')||0)}catch{}},[]);
   useEffect(()=>{
     sb.auth.getSession().then(({data})=>setS(data.session));
-    const {data}=sb.auth.onAuthStateChange((_e,x)=>setS(x));
+    const {data}=sb.auth.onAuthStateChange((_e,x)=>{setS(x);if(x?.provider_refresh_token)storeRefresh(x)});
     if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
     return()=>data.subscription.unsubscribe();
   },[]);
+  useEffect(()=>{const nx=LS('nl-next');if(s&&nx&&location.pathname==='/'){LS('nl-next',null);location.replace(nx)}},[s]);
   if(s===undefined)return <Splash/>;
-  return s?<Gate session={s}/>:<Auth/>;
+  return s?<Gate session={s} startUser={startUser}/>:<Auth startUser={startUser}/>;
 }
 
-function Auth(){
-  const [msg,setMsg]=useState(''),[busy,setBusy]=useState(false);
-  const google=async()=>{const {error}=await sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:window.location.origin}});if(error)setMsg(error.message)};
+function Auth({startUser}){
+  const [msg,setMsg]=useState(''),[busy,setBusy]=useState(false),[tp,setTp]=useState(null);
+  useEffect(()=>{if(startUser)sb.rpc('get_public_profile',{uname:startUser}).then(({data})=>setTp(data?.[0]||false))},[startUser]);
+  const google=async()=>{
+    if(!navigator.onLine)return setMsg('You are offline. Connect to the internet to sign in.');
+    if(startUser)LS('nl-next','/u/'+startUser);
+    const {error}=await sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:window.location.origin+window.location.pathname,scopes:DRIVE_SCOPE,queryParams:{access_type:'offline'}}});
+    if(error)setMsg(error.message);
+  };
   const guest=async()=>{setBusy(true);const {error}=await sb.auth.signInAnonymously();if(error){setMsg(error.message);setBusy(false)}};
   return <div className="center hero"><img className="pulse" src="/logo.png" width="120" height="120" alt="NexLink.Chat logo"/>
-    <h1><Brand/></h1><p className="mute">Private chat that only you and your friends can read.</p>
-    <div className="perks"><span>🔐 End-to-end encrypted</span><span>⏱ Temp rooms, no sign-up</span><span>🆓 Free</span></div>
+    <h1><Brand/></h1>
+    {startUser&&<div className="prowcard">{tp===null?<p className="mute">Loading profile…</p>:tp===false?<p className="mute">This profile doesn’t exist.</p>:<><Av n={tp.display_name} src={tp.avatar}/><div><b>{tp.display_name}</b><span className="mute" style={{display:'block'}}>@{tp.username}</span></div></>}</div>}
+    <p className="mute">{startUser&&tp?`Sign in or continue as a guest to chat with ${tp.display_name}.`:'Private chat that only you and your friends can read.'}</p>
+    {!startUser&&<div className="perks"><span>🔐 End-to-end encrypted</span><span>⏱ Temp rooms, no sign-up</span><span>🆓 Free</span></div>}
     <div className="card">
       <button className="gbtn" onClick={google}><GIcon/>Continue with Google</button>
       <p className="mute" style={{textAlign:'center'}}>or</p>
-      <button className="alt" disabled={busy} onClick={guest}>⏱ Start a temporary chat</button>
-      <p className="mute" style={{fontSize:13}}>Temp rooms last 1 to 5 hours and only need a room code and password.</p>
+      <button className="alt" disabled={busy} onClick={guest}>{startUser?'⏱ Chat as a temporary guest':'⏱ Start a temporary chat'}</button>
+      <p className="mute" style={{fontSize:13}}>{startUser?'Guests only need a nickname. Their account is deleted after 2 days.':'Temp rooms last 1 to 5 hours and only need a room code and password.'}</p>
       {msg&&<p className="err" role="alert">{msg}</p>}
     </div></div>;
 }
 
-function Gate({session}){
+function GuestLink({startUser,session,onDone}){
+  const [nick,setNick]=useState(''),[msg,setMsg]=useState(''),[busy,setBusy]=useState(false),[tp,setTp]=useState(null);
+  useEffect(()=>{sb.rpc('get_public_profile',{uname:startUser}).then(({data})=>setTp(data?.[0]||false))},[startUser]);
+  async function go(ev){
+    ev.preventDefault();setBusy(true);setMsg('');
+    try{
+      const {error}=await sb.rpc('ensure_profile',{nick});if(error)throw error;
+      const id=await C.newIdentity();
+      const {error:e2}=await sb.rpc('guest_set_key',{pub:id.pub});if(e2)throw e2;
+      const k=await C.loadPriv(id.priv);await C.saveKey(session.user.id,k);
+      const {data}=await sb.from('profiles').select('*').eq('id',session.user.id).single();
+      onDone(data,k);
+    }catch(x){setMsg(x.message||'Something went wrong')}
+    setBusy(false);
+  }
+  return <div className="center"><img className="pulse" src="/logo.png" width="90" height="90" alt=""/>
+    <h1>{tp?`Chat with ${tp.display_name}`:'Chat as a guest'}</h1>
+    {tp&&<div className="prowcard"><Av n={tp.display_name} src={tp.avatar}/><div><b>{tp.display_name}</b><span className="mute" style={{display:'block'}}>@{tp.username}</span></div></div>}
+    <form className="card" onSubmit={go}>
+      <input required maxLength={40} placeholder="Your nickname" value={nick} onChange={e=>setNick(e.target.value)}/>
+      <p className="mute" style={{fontSize:13}}>Your chat is end-to-end encrypted. This guest account is deleted after 2 days.</p>
+      <button disabled={busy}>{busy?'Working…':'Start chatting'}</button>
+      {msg&&<p className="err" role="alert">{msg}</p>}
+      <a onClick={()=>sb.auth.signOut()}>Cancel</a>
+    </form></div>;
+}
+
+function Gate({session,startUser}){
   const anon=session.user.is_anonymous;
-  const [st,setSt]=useState('load'),[me,setMe]=useState(null),[priv,setPriv]=useState(null),[first,setFirst]=useState(null);
+  const [st,setSt]=useState('load'),[me,setMe]=useState(null),[priv,setPriv]=useState(null),[first,setFirst]=useState(null),[notice,setNotice]=useState('');
   useEffect(()=>{(async()=>{
-    const {data:pr}=await sb.from('profiles').select('*').eq('id',session.user.id).maybeSingle();
-    if(!pr)return setSt(anon?'guest':'setup');
+    let {data:pr,error}=await sb.from('profiles').select('*').eq('id',session.user.id).maybeSingle();
+    if(error&&!pr){try{pr=JSON.parse(LS('nl-prof:'+session.user.id)||'null')}catch{}if(!pr)return setSt('offline')}
+    if(!pr)return setSt(anon?(startUser?'glink':'guest'):'setup');
+    if(pr.msg_policy==='none'){await sb.from('profiles').update({msg_policy:'everyone'}).eq('id',pr.id);pr={...pr,msg_policy:'everyone'};setNotice('Welcome back. Your account is active again.')}
+    try{LS('nl-prof:'+pr.id,JSON.stringify({...pr,avatar:undefined}))}catch{}
     setMe(pr);
-    if(pr.is_guest)return setSt('ready');
     const k=await C.getKey(pr.id);
+    if(pr.is_guest){if(k||!startUser){setPriv(k||null);return setSt('ready')}return setSt('glink')}
     if(k){setPriv(k);setSt('ready')}else setSt('restore');
   })()},[session.user.id,anon]);
+  useEffect(()=>{if(st!=='offline')return;const f=()=>location.reload();window.addEventListener('online',f);return()=>window.removeEventListener('online',f)},[st]);
   if(st==='load')return <Splash/>;
+  if(st==='offline')return <Splash t="You’re offline. Reconnect to continue."/>;
+  if(st==='glink')return <GuestLink startUser={startUser} session={session} onDone={(p,k)=>{setMe(p);setPriv(k);setSt('ready')}}/>;
   if(st==='guest')return <div className="center"><img src="/logo.png" width="90" height="90" alt=""/><h1>Temporary chat</h1>
     <TempForm needNick onCancel={()=>sb.auth.signOut()} onDone={async id=>{const {data}=await sb.from('profiles').select('*').eq('id',session.user.id).single();setMe(data);setFirst(id);setSt('ready')}}/></div>;
-  if(st==='ready')return <Chat me={me} priv={priv} first={first}/>;
+  if(st==='ready')return <Chat me={me} priv={priv} first={first} startUser={startUser} notice={notice}/>;
   return <Keys mode={st} session={session} me={me} done={(m,k)=>{if(m)setMe(m);setPriv(k);setSt('ready')}}/>;
 }
 
@@ -182,14 +229,14 @@ const REACTS=['👍','❤️','😂','😮','😢','🙏'];
 const ACC=[['#2b7bff','#4f9bff'],['#7c5cff','#a78bfa'],['#10b981','#34d399'],['#f43f5e','#fb7185'],['#f59e0b','#fbbf24']];
 const applyAccent=i=>{const a=ACC[i]||ACC[0],r=document.documentElement.style;r.setProperty('--acc',a[0]);r.setProperty('--acc2',a[1])};
 const urlB64=s=>{const b=(s+'='.repeat((4-s.length%4)%4)).replace(/-/g,'+').replace(/_/g,'/');return Uint8Array.from(atob(b),c=>c.charCodeAt(0))};
-function Chat({me,priv,first}){
+function Chat({me,priv,first,startUser,notice}){
   const [chats,setChats]=useState([]),[mem,setMem]=useState({}),[msgs,setMsgs]=useState({}),[aid,setAid]=useState(null),[unread,setUn]=useState({}),[last,setLast]=useState({});
   const [q,setQ]=useState(''),[hits,setHits]=useState([]),[txt,setTxt]=useState(''),[modal,setModal]=useState(null),[side,setSide]=useState(true),[live,setLive]=useState(true);
-  const [ver,setVer]=useState(0),[now,setNow]=useState(Date.now()),[unlock,setUnlock]=useState(''),[keyed,setKeyed]=useState(true),[tab,setTab]=useState('all'),[toast,setToast]=useState(''),[emo,setEmo]=useState(false),[prof,setProf]=useState(me),[sel,setSel]=useState(null),[replyTo,setReplyTo]=useState(null),[find,setFind]=useState(null),[lb,setLb]=useState(null),[editing,setEditing]=useState(null),[atBottom,setAtBottom]=useState(true),[pview,setPview]=useState(null),[menu,setMenu]=useState(null),[rxp,setRxp]=useState(null),[selIds,setSelIds]=useState([]),[selMode,setSelMode]=useState(false),[grantFor,setGrantFor]=useState(null),[fwd,setFwd]=useState(null),[fq,setFq]=useState(''),[clr,setClr]=useState({}),[grants,setGrants]=useState({}),[hid,setHid]=useState(()=>JSON.parse(LS('nl-hide:'+me.id)||'[]')),[fresh,setFresh]=useState({}),[burst,setBurst]=useState(null),[lim,setLim]=useState(300),[loaded,setLoaded]=useState(false),[readAt,setReadAt]=useState(0),[muted,setMuted]=useState(()=>JSON.parse(LS('nl-mute:'+me.id)||'[]')),[pins,setPins]=useState(()=>JSON.parse(LS('nl-pin:'+me.id)||'[]')),[pushOn,setPushOn]=useState(LS('nl-push:'+me.id)==='1');
+  const [ver,setVer]=useState(0),[now,setNow]=useState(Date.now()),[unlock,setUnlock]=useState(''),[keyed,setKeyed]=useState(true),[tab,setTab]=useState('all'),[toast,setToast]=useState(''),[emo,setEmo]=useState(false),[prof,setProf]=useState(me),[sel,setSel]=useState(null),[replyTo,setReplyTo]=useState(null),[find,setFind]=useState(null),[lb,setLb]=useState(null),[editing,setEditing]=useState(null),[atBottom,setAtBottom]=useState(true),[pview,setPview]=useState(null),[menu,setMenu]=useState(null),[rxp,setRxp]=useState(null),[selIds,setSelIds]=useState([]),[selMode,setSelMode]=useState(false),[grantFor,setGrantFor]=useState(null),[fwd,setFwd]=useState(null),[fq,setFq]=useState(''),[clr,setClr]=useState({}),[grants,setGrants]=useState({}),[hid,setHid]=useState(()=>JSON.parse(LS('nl-hide:'+me.id)||'[]')),[fresh,setFresh]=useState({}),[burst,setBurst]=useState(null),[lim,setLim]=useState(300),[online,setOnline]=useState(true),[outN,setOutN]=useState(()=>JSON.parse(LS('nl-out:'+me.id)||'[]').length),[driveOk,setDriveOk]=useState(null),[loaded,setLoaded]=useState(false),[readAt,setReadAt]=useState(0),[muted,setMuted]=useState(()=>JSON.parse(LS('nl-mute:'+me.id)||'[]')),[pins,setPins]=useState(()=>JSON.parse(LS('nl-pin:'+me.id)||'[]')),[pushOn,setPushOn]=useState(LS('nl-push:'+me.id)==='1');
   const [bk,setBk]=useState(()=>({auto:LS('nl-auto:'+me.id)==='1',at:+LS('nl-last:'+me.id)||0,msg:'',busy:false,pass:'',stale:false}));
   const upd=p=>setBk(b=>({...b,...p}));
-  const plain=useRef(new Map()),aidR=useRef(null),endR=useRef(null),taR=useRef(null),chatsR=useRef([]),fileR=useRef(null),grpR=useRef(null),lastDone=useRef(new Set()),boxR=useRef(null),mutedR=useRef([]),searchR=useRef(null),swRef=useRef({}),ptrRef=useRef('mouse'),rxT=useRef(null),dragMoved=useRef(false),prevRx=useRef({}),menuAt=useRef(0),drafts=useRef({});
-  aidR.current=aid;chatsR.current=chats;mutedR.current=muted;
+  const plain=useRef(new Map()),aidR=useRef(null),endR=useRef(null),taR=useRef(null),chatsR=useRef([]),fileR=useRef(null),grpR=useRef(null),lastDone=useRef(new Set()),boxR=useRef(null),mutedR=useRef([]),searchR=useRef(null),swRef=useRef({}),ptrRef=useRef('mouse'),rxT=useRef(null),dragMoved=useRef(false),prevRx=useRef({}),menuAt=useRef(0),drafts=useRef({}),chatPushed=useRef(false),exitArm=useRef(false),skipPop=useRef(false),startDone=useRef(false),memR=useRef({});
+  aidR.current=aid;chatsR.current=chats;mutedR.current=muted;memR.current=mem;
   const flash=m=>{setToast(m);setTimeout(()=>setToast(''),3500)};
   const cur=chats.find(c=>c.id===aid&&(!c.expires_at||new Date(c.expires_at)>Date.now()));
   const other=c=>(mem[c.id]||[]).find(p=>p.id!==me.id);
@@ -208,8 +255,10 @@ function Chat({me,priv,first}){
     return{...m,p:plain.current.get(m.id)};
   },[me.id,priv]);
   const load=useCallback(async()=>{
-    const {data}=await sb.from('chat_members').select('chat_id,is_admin,cleared_at,chats(id,kind,title,ttl_hours,code,expires_at,avatar),profiles(id,username,display_name,public_key,avatar,is_guest)');
+    const {data,error}=await sb.from('chat_members').select('chat_id,is_admin,cleared_at,chats(id,kind,title,ttl_hours,code,expires_at,avatar),profiles(id,username,display_name,public_key,avatar,is_guest)');
+    if(error&&!data){try{const c=JSON.parse(LS('nl-cc:'+me.id)||'null');if(c){setMem(c.by);setClr(c.cl);setChats(c.cs)}}catch{}setLoaded(true);return}
     const by={},cs={},cl={};(data||[]).forEach(r=>{(by[r.chat_id]??=[]).push({...r.profiles,is_admin:r.is_admin});cs[r.chat_id]=r.chats;if(r.profiles?.id===me.id)cl[r.chat_id]=r.cleared_at});
+    try{localStorage.setItem('nl-cc:'+me.id,JSON.stringify({by:Object.fromEntries(Object.entries(by).map(([k,v])=>[k,v.map(p=>({...p,avatar:undefined}))])),cl,cs:Object.values(cs).filter(Boolean).map(c=>({...c,avatar:undefined}))}))}catch{}
     setMem(by);setClr(cl);setChats(Object.values(cs).filter(Boolean));setLoaded(true);loadGrants();
   },[]);
   async function syncChat(id,full){
@@ -219,7 +268,7 @@ function Chat({me,priv,first}){
   }
 
   useEffect(()=>{const t=setInterval(()=>setNow(Date.now()),30000);return()=>clearInterval(t)},[]);
-  useEffect(()=>{if(first){setAid(first);setSide(false)}},[first]);
+  useEffect(()=>{if(first){pushChat();setAid(first);setSide(false)}},[first]);
   useEffect(()=>{if(aid)C.getTempKey(aid).then(k=>setKeyed(!!k))},[aid,ver]);
   useEffect(()=>{const n=Object.values(unread).reduce((a,b)=>a+b,0);document.title=(n?`(${n}) `:'')+'NexLink.Chat'},[unread]);
   useEffect(()=>{const f=e=>e.key==='Escape'&&(setModal(null),setEmo(false),setLb(null),setPview(null),setMenu(null),setRxp(null),setFwd(null),setSelIds([]),setSelMode(false),setGrantFor(null));window.addEventListener('keydown',f);return()=>window.removeEventListener('keydown',f)},[]);
@@ -256,7 +305,7 @@ function Chat({me,priv,first}){
     if(!aid||!live)return;let off=false;
     (async()=>{
       const c=chatsR.current.find(x=>x.id===aid);let rows;
-      if(c&&keepable(c)){const gk='nl-gs:'+me.id+':'+aid,full=+LS(gk)!==gcount;await syncChat(aid,full);if(full)LS(gk,String(gcount));rows=(await A.byChat(me.id,aid)).slice(-lim)}
+      if(c&&keepable(c)){const gk='nl-gs:'+me.id+':'+aid,full=+LS(gk)!==gcount;try{await syncChat(aid,full);if(full)LS(gk,String(gcount))}catch{}rows=(await A.byChat(me.id,aid)).slice(-lim)}
       else{const {data}=await sb.from('messages').select('*').eq('chat_id',aid).order('created_at',{ascending:false}).limit(80);rows=(data||[]).reverse()}
       const x=await Promise.all(rows.map(dec));
       if(!off)setMsgs(o=>({...o,[aid]:x}));
@@ -272,7 +321,7 @@ function Chat({me,priv,first}){
     const s=q.trim().toLowerCase().replace(/[^a-z0-9_]/g,'');
     if(me.is_guest||s.length<2){setHits([]);return}
     const t=setTimeout(async()=>{
-      const {data}=await sb.from('profiles').select('id,username,display_name,avatar').ilike('username',s+'%').eq('is_guest',false).neq('id',me.id).limit(6);
+      const {data}=await sb.from('profiles').select('id,username,display_name,avatar').ilike('username',s+'%').eq('is_guest',false).neq('msg_policy','none').neq('id',me.id).limit(6);
       setHits(data||[]);
     },300);
     return()=>clearTimeout(t);
@@ -319,6 +368,25 @@ function Chat({me,priv,first}){
 
   useEffect(()=>{const f=e=>setLb(e.detail);window.addEventListener('nl-img',f);return()=>window.removeEventListener('nl-img',f)},[]);
   useEffect(()=>{const f=e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();setSide(true);setTimeout(()=>searchR.current?.focus(),50)}};window.addEventListener('keydown',f);return()=>window.removeEventListener('keydown',f)},[]);
+  useEffect(()=>{
+    setOnline(navigator.onLine);
+    const on=()=>{setOnline(true);setVer(v=>v+1);load();flushOutbox()},off=()=>setOnline(false);
+    window.addEventListener('online',on);window.addEventListener('offline',off);
+    const t=setTimeout(()=>{if(navigator.onLine)flushOutbox()},3000);
+    return()=>{window.removeEventListener('online',on);window.removeEventListener('offline',off);clearTimeout(t)};
+  },[]);
+  useEffect(()=>{if(notice)flash(notice)},[notice]);
+  useEffect(()=>{
+    if(!startUser||startDone.current)return;startDone.current=true;
+    (async()=>{
+      const {data}=await sb.rpc('get_public_profile',{uname:startUser});const u=data?.[0];
+      try{history.replaceState(history.state,'','/')}catch{}
+      if(!u)return flash('That profile does not exist');
+      if(u.id===me.id)return setModal('s');
+      setPview(u);
+    })();
+  },[startUser]);
+  useEffect(()=>{if(modal==='s'&&!me.is_guest)D.linked().then(setDriveOk)},[modal]);
   useEffect(()=>{if(!aid)return;const f=()=>LS('nl-read:'+me.id+':'+aid,String(Date.now()));window.addEventListener('beforeunload',f);return()=>{f();window.removeEventListener('beforeunload',f)}},[aid]);
   function removeLocal(id){A.del(me.id,id).catch(()=>{});setMsgs(o=>Object.fromEntries(Object.entries(o).map(([k,v])=>[k,v.filter(x=>x.id!==id)])))}
   const snip=m=>m.p?(m.p.t==='file'?'📎 '+m.p.name:m.p.text).slice(0,80):'Encrypted message';
@@ -370,7 +438,23 @@ function Chat({me,priv,first}){
   const togglePick=id=>setSelIds(a=>a.includes(id)?a.filter(x=>x!==id):[...a,id]);
   const clearSel=()=>{setSelIds([]);setSelMode(false);setGrantFor(null)};
   useEffect(()=>{setSelIds([]);setSelMode(false);setGrantFor(null);setMenu(null);setRxp(null);setReplyTo(null);setEditing(null);setLim(300);setTxt(drafts.current[aid]||'')},[aid]);
-  useEffect(()=>{const f=()=>setSide(true);window.addEventListener('popstate',f);return()=>window.removeEventListener('popstate',f)},[]);
+  const pushChat=()=>{if(isMob()&&!chatPushed.current){history.pushState({nl:'chat'},'');chatPushed.current=true}};
+  const goBack=()=>{if(chatPushed.current)history.back();else setSide(true)};
+  // Android/mobile back: chat -> list, then "press back again to exit"
+  useEffect(()=>{
+    if(!isMob())return;
+    history.pushState({nl:'root'},'');
+    const f=e=>{
+      if(e.state&&(e.state.nl||!e.state.__NA))e.stopImmediatePropagation();
+      if(skipPop.current){skipPop.current=false;return}
+      if(!isMob())return;
+      if(chatPushed.current){chatPushed.current=false;setSide(true);return}
+      if(exitArm.current){history.back();return}
+      exitArm.current=true;flash('Press back again to exit');history.pushState({nl:'root'},'');setTimeout(()=>{exitArm.current=false},2000);
+    };
+    window.addEventListener('popstate',f,true);return()=>window.removeEventListener('popstate',f,true);
+  },[]);
+  useEffect(()=>{if(side&&chatPushed.current&&isMob()){chatPushed.current=false;skipPop.current=true;history.back()}},[side]);
   useEffect(()=>{const b=boxR.current;if(!b)return;const f=e=>{if(swRef.current?.held)e.preventDefault()};b.addEventListener('touchmove',f,{passive:false});return()=>b.removeEventListener('touchmove',f)},[aid,!!cur]);
   // "Name: text" lines, replies as: Name: Replied on "quote" text
   const fmtMsgs=list=>[...list].sort((a,b)=>new Date(a.created_at)-new Date(b.created_at)).filter(m=>m.p&&m.p.t!=='hreq'&&m.p.t!=='hgrant').map(m=>{
@@ -399,8 +483,8 @@ function Chat({me,priv,first}){
     try{await post({t:'hreq'});flash('Request sent')}catch(x){flash(x.message)}
   }
   async function loadGrants(){
-    const {data}=await sb.from('history_grants').select('chat_id,from_ts,to_ts').eq('user_id',me.id);
-    const g={};(data||[]).forEach(r=>{(g[r.chat_id]??=[]).push(r)});setGrants(g);
+    const {data,error}=await sb.from('history_grants').select('chat_id,from_ts,to_ts').eq('user_id',me.id);
+    if(error)return;const g={};(data||[]).forEach(r=>{(g[r.chat_id]??=[]).push(r)});setGrants(g);
   }
   async function shareHistory(){
     const ps=picked.slice().sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));if(!ps.length)return;
@@ -458,8 +542,20 @@ function Chat({me,priv,first}){
     },
     onTouchCancel:()=>{clearTimeout(swRef.current?.timer);swRef.current={}}
   });
+  async function setPolicy(v){
+    if(v==='none'&&!confirm('This deactivates your account: nobody can find or message you. Sign in again any time to reactivate it. Continue?'))return;
+    const {error}=await sb.from('profiles').update({msg_policy:v}).eq('id',me.id);if(error)return flash(error.message);
+    setProf(p=>({...p,msg_policy:v}));
+    if(v==='none')await sb.auth.signOut();else flash('Privacy updated');
+  }
+  async function shareLink(){
+    const url=`${location.origin}/u/${prof.username}`;
+    try{if(navigator.share){await navigator.share({title:'NexLink.Chat',text:'Chat with me on NexLink.Chat',url});return}}catch{}
+    copyText(url);flash('Profile link copied');
+  }
+  const linkDrive=()=>sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:window.location.origin,scopes:DRIVE_SCOPE,queryParams:{access_type:'offline',prompt:'consent'}}});
   // ---- actions ----
-  const open=id=>{if(window.innerWidth<=760&&!history.state?.chat)history.pushState({chat:id},'');setReadAt(+LS('nl-read:'+me.id+':'+id)||0);setAid(id);setSide(false);setUn(u=>({...u,[id]:0}))};
+  const open=id=>{pushChat();setReadAt(+LS('nl-read:'+me.id+':'+id)||0);setAid(id);setSide(false);setUn(u=>({...u,[id]:0}))};
   async function dm(u){const {data,error}=await sb.rpc('create_dm',{other:u.id});if(error)return flash(error.message);setQ('');await load();open(data)}
   async function group(ev){
     ev.preventDefault();const f=new FormData(ev.target);
@@ -469,17 +565,34 @@ function Chat({me,priv,first}){
     const {data,error}=await sb.rpc('create_group',{t:String(f.get('t')),members:ps.map(p=>p.id),ttl:+f.get('ttl')});
     if(error)return flash(error.message);setModal(null);await load();open(data);
   }
+  async function sendRaw(chat,payload,fp,id){
+    let e;
+    if(chat.kind==='temp'){const k=await C.getTempKey(chat.id);if(!k)throw new Error('Enter the room password first');e=await C.encryptTemp(payload,k,chat.id)}
+    else e=await C.encryptMessage(payload,memR.current[chat.id],chat.id);
+    const {error}=await sb.from('messages').insert({id,chat_id:chat.id,sender_id:me.id,file_path:fp||null,...e});
+    if(error&&error.code!=='23505')throw error;
+  }
   async function post(payload,fp,tc){
     const chat=tc||cur,id=crypto.randomUUID(),cid=chat.id,opt=!tc&&payload.t!=='react'&&payload.t!=='edit';
     if(opt){plain.current.set(id,payload);setMsgs(o=>({...o,[cid]:[...(o[cid]||[]),{id,chat_id:cid,sender_id:me.id,created_at:new Date().toISOString(),expires_at:new Date(Date.now()+864e5).toISOString(),p:payload,pending:true}]}))}
-    try{
-      let e;
-      if(chat.kind==='temp'){const k=await C.getTempKey(cid);if(!k)throw new Error('Enter the room password first');e=await C.encryptTemp(payload,k,cid)}
-      else e=await C.encryptMessage(payload,mem[cid],cid);
-      const {error}=await sb.from('messages').insert({id,chat_id:cid,sender_id:me.id,file_path:fp||null,...e});if(error)throw error;
-    }catch(x){if(opt)setMsgs(o=>({...o,[cid]:(o[cid]||[]).filter(m=>m.id!==id)}));throw x}
+    try{await sendRaw(chat,payload,fp,id)}
+    catch(x){
+      const net=!navigator.onLine||x instanceof TypeError||/fetch|network|Failed to/i.test(x?.message||'');
+      if(net&&payload.t!=='file'&&chat.kind!=='temp'){const q=JSON.parse(LS('nl-out:'+me.id)||'[]');q.push({id,cid,payload});LS('nl-out:'+me.id,JSON.stringify(q));setOutN(q.length);return}
+      if(opt)setMsgs(o=>({...o,[cid]:(o[cid]||[]).filter(m=>m.id!==id)}));
+      throw x;
+    }
     if(opt)setMsgs(o=>({...o,[cid]:(o[cid]||[]).map(m=>m.id===id?{...m,pending:false}:m)}));
     if(payload.t!=='react'&&payload.t!=='edit')api('/api/push',{chatId:cid}).catch(()=>{});
+  }
+  async function flushOutbox(){
+    const q=JSON.parse(LS('nl-out:'+me.id)||'[]');if(!q.length)return;
+    const left=[];
+    for(const it of q){
+      const chat=chatsR.current.find(c=>c.id===it.cid);if(!chat){left.push(it);continue}
+      try{await sendRaw(chat,it.payload,null,it.id);setMsgs(o=>({...o,[it.cid]:(o[it.cid]||[]).map(m=>m.id===it.id?{...m,pending:false}:m)}))}catch{left.push(it)}
+    }
+    LS('nl-out:'+me.id,JSON.stringify(left));setOutN(left.length);
   }
   async function send(ev){
     ev.preventDefault();const t=txt.trim();if(!t||!cur)return;setTxt('');drafts.current[cur.id]='';setEmo(false);
@@ -562,7 +675,7 @@ function Chat({me,priv,first}){
           <button className="ic" aria-label="Forward" title="Forward" disabled={!selIds.length} onClick={()=>setFwd(picked)}><Ic d={IC.fwd}/></button>
           <button className="ic" aria-label="Copy" title="Copy" disabled={!selIds.length} onClick={()=>{copyText(fmtMsgs(picked));flash('Copied');clearSel()}}><Ic d={IC.copy}/></button>
           <button className="ic" aria-label="Delete" title="Delete" disabled={!selIds.length} onClick={()=>deleteMsgs(picked)}><Ic d={IC.trash}/></button></>}</header>}
-      <header><button className="ic back" aria-label="Back" onClick={()=>history.state?.chat?history.back():setSide(true)}><Ic d={IC.back}/></button><span className="clk" onClick={openHead}><Av n={title(cur)} src={pic(cur)}/></span>
+      <header><button className="ic back" aria-label="Back" onClick={goBack}><Ic d={IC.back}/></button><span className="clk" onClick={openHead}><Av n={title(cur)} src={pic(cur)}/></span>
         <div className="grow clk" onClick={openHead}><b>{title(cur)}</b><span className={'mute'+(cur.kind==='temp'&&new Date(cur.expires_at)-now<600000?' warn':'')}>{cur.kind==='temp'?`Code ${cur.code.slice(0,4)}-${cur.code.slice(4)} · ${left(cur)} · ${(mem[cur.id]||[]).length} people`:cur.kind==='dm'?'End-to-end encrypted':`${(mem[cur.id]||[]).length} members`}</span></div>
         <Menu label="Chat options" items={[cur.kind==='temp'&&{t:'Copy invite',i:IC.copy,f:()=>{navigator.clipboard?.writeText(`Join my NexLink.Chat temp room\nCode: ${cur.code.slice(0,4)}-${cur.code.slice(4)}\n${location.origin}\n(Ask me for the password)`);flash('Invite copied')}},{t:pins.includes(cur.id)?'Unpin chat':'Pin chat',i:IC.pin,f:()=>togglePin(cur.id)},{t:muted.includes(cur.id)?'Unmute notifications':'Mute notifications',i:IC.bell,f:()=>toggleMute(cur.id)},cur.kind==='group'&&{t:'Group info & members',i:IC.users,f:()=>setModal('i')},{t:'Search in chat',i:IC.search,f:()=>setFind('')},cur.kind==='group'&&{t:'Change group photo',i:IC.camera,f:()=>grpR.current.click()},cur.kind!=='temp'&&{t:'Disappearing messages',i:IC.timer,f:()=>setModal('d')},cur.kind==='dm'&&{t:'Verify safety number',i:IC.shield,f:verify},{t:'Select messages',i:IC.select,f:()=>setSelMode(true)},cur.kind!=='temp'&&clr[cur.id]&&{t:'Request chat history',i:IC.hist,f:reqHistory},cur.kind!=='temp'&&{t:'Clear chat',i:IC.trash,f:clearChat},cur.kind!=='dm'&&{t:cur.kind==='temp'?'Leave room':'Leave group',i:IC.out,danger:true,f:leave}]}/></header>
       <input ref={grpR} type="file" accept="image/*" hidden onChange={e=>{setGrpPic(e.target.files[0]);e.target.value=''}}/>
@@ -603,7 +716,7 @@ function Chat({me,priv,first}){
       <b style={{fontSize:20,textAlign:'center'}}>{pview.display_name}</b>
       <span className="mute" style={{textAlign:'center'}}>@{pview.username}{pview.is_guest?' · guest':''}</span>
       {pview.id===me.id?<p className="mute" style={{textAlign:'center'}}>This is you</p>:<>
-        {!me.is_guest&&!pview.is_guest&&<button onClick={()=>{const u=pview;setPview(null);dm(u)}}>Message</button>}
+        {(()=>{const pol=pview.msg_policy||'everyone';const why=pview.is_guest?'':pol==='none'?'This person is not accepting messages.':pol==='signed'&&me.is_guest?'This person only accepts messages from signed-in users.':pol==='temp'&&!me.is_guest?'This person only accepts messages from temporary guests.':'';return why?<p className="mute" style={{textAlign:'center'}}>{why}</p>:!pview.is_guest&&<button onClick={()=>{const u=pview;setPview(null);dm(u)}}>Message</button>})()}
         {pview.sn&&<><p className="mute" style={{fontSize:13}}>Safety number. Compare it with {pview.display_name} on a call to make sure nobody is intercepting your chat.</p><code style={{whiteSpace:'pre'}}>{pview.sn}</code></>}</>}
       <button className="alt" onClick={()=>setPview(null)}>Close</button></div></div>}
     {modal==='i'&&cur&&<div className="modal" onClick={()=>setModal(null)}><div className="card" onClick={e=>e.stopPropagation()}>
@@ -620,8 +733,15 @@ function Chat({me,priv,first}){
       <button className="alt" onClick={toggleTheme}>Switch light / dark theme</button>
       <button className="alt" onClick={pushOn?disablePush:enablePush}>{pushOn?'Turn off background notifications':'Turn on background notifications'}</button>
       <div className="swatches" role="group" aria-label="Accent colour">{ACC.map((a,i)=><button key={i} type="button" className="sw" aria-label={'Accent colour '+(i+1)} style={{background:`linear-gradient(135deg,${a[0]},${a[1]})`}} onClick={()=>{applyAccent(i);LS('nl-accent',String(i))}}/>)}</div>
+      {!me.is_guest&&<>
+        <b>Privacy</b>
+        <p className="mute" style={{fontSize:13}}>Who can start a chat with you</p>
+        <select value={prof.msg_policy||'everyone'} onChange={e=>setPolicy(e.target.value)} style={{width:'100%'}} aria-label="Who can start a chat with you">
+          <option value="everyone">Everyone</option><option value="signed">Signed-in users only</option><option value="temp">Temporary guests only</option><option value="none">No one (deactivate my account)</option></select>
+        <button className="alt" onClick={shareLink}>Share my profile link</button></>}
       {!me.is_guest&&<><b>Google Drive backup</b>
-        {!D.configured?<p className="err">Add NEXT_PUBLIC_GOOGLE_CLIENT_ID in Vercel to enable backup.</p>:bk.auto?<>
+        {driveOk===false&&<><p className="mute">Allow NexLink.Chat to keep an encrypted backup in your own Google Drive. Google asks for permission once, then backups run without popups.</p><button onClick={linkDrive}>Allow Google Drive access</button></>}
+        {driveOk===false&&!D.configured?null:bk.auto?<>
           <p className="mute">Auto-backup is on. Last backup: {bk.at?new Date(bk.at).toLocaleString():'never'}. It runs about once a day while NexLink.Chat is open.</p>
           <button disabled={bk.busy} onClick={backupNow}>Back up now</button>
           <a onClick={()=>{LS('nl-auto:'+me.id,null);upd({auto:false,msg:''})}}>Turn off auto-backup</a></>:<>
@@ -653,6 +773,7 @@ function Chat({me,priv,first}){
       <div className="fwdlist">{chats.filter(c=>(!c.expires_at||new Date(c.expires_at)>now)&&title(c).toLowerCase().includes(fq.trim().toLowerCase())).map(c=><div key={c.id} className="row" onClick={()=>forwardTo(c)}><Av n={title(c)} src={pic(c)}/><div className="grow"><b>{title(c)}</b></div></div>)}</div>
       <button className="alt" onClick={()=>{setFwd(null);setFq('')}}>Cancel</button></div></div>}
     {lb&&<div className="modal" onClick={()=>setLb(null)}><img src={lb} alt="" className="lbimg"/></div>}
+    {(!online||outN>0)&&<div className="offline" role="status">{online?`Sending ${outN} queued message${outN>1?'s':''}…`:`You’re offline. Messages send when you reconnect.${outN?` (${outN} waiting)`:''}`}</div>}
     {toast&&<div className={'toast'+(/fail|error|cannot|can’t|wrong|not allowed|too large|limit|blocked|no user/i.test(toast)?' bad':'')} role="status">{toast}</div>}
   </div>;
 }
