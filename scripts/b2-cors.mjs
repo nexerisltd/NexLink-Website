@@ -11,5 +11,5 @@ const api=auth.apiInfo?.storageApi?.apiUrl||auth.apiUrl;
 const post=(p,b)=>fetch(`${api}/b2api/v3/${p}`,{method:'POST',headers:{Authorization:auth.authorizationToken,'Content-Type':'application/json'},body:JSON.stringify(b)}).then(j);
 const {buckets}=await post('b2_list_buckets',{accountId:auth.accountId,bucketName:B2_BUCKET});
 if(!buckets?.length)throw new Error('Bucket not found: '+B2_BUCKET);
-await post('b2_update_bucket',{accountId:auth.accountId,bucketId:buckets[0].bucketId,corsRules:[{corsRuleName:'nexlink',allowedOrigins:ORIGIN.split(','),allowedHeaders:['content-type'],allowedOperations:['s3_put','s3_get','s3_head'],exposeHeaders:['etag'],maxAgeSeconds:3600}]});
+await post('b2_update_bucket',{accountId:auth.accountId,bucketId:buckets[0].bucketId,corsRules:[{corsRuleName:'nexlink',allowedOrigins:ORIGIN.split(','),allowedHeaders:['*'],allowedOperations:['s3_put','s3_get','s3_head','s3_delete'],exposeHeaders:['etag'],maxAgeSeconds:3600}]});
 console.log('CORS updated for',buckets[0].bucketName,'->',ORIGIN);
