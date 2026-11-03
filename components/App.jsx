@@ -30,7 +30,7 @@ export default function App({startUser,startChannel}){
   return s?<Gate session={s} startUser={startUser} startChannel={startChannel}/>:<Auth startUser={startUser}/>;
 }
 
-function Gate({session,startUser}){
+function Gate({session,startUser,startChannel}){
   const anon=session.user.is_anonymous;
   const [st,setSt]=useState('load'),[me,setMe]=useState(null),[priv,setPriv]=useState(null),[first,setFirst]=useState(null),[notice,setNotice]=useState('');
   useEffect(()=>{(async()=>{
