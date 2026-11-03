@@ -421,7 +421,8 @@ function Chat({me,priv,first,startUser,startChannel,notice}){
   const setReadMark=useCallback(id=>{
     try{LS('nl-read:'+me.id+':'+id,String(Date.now()));
       // server-side read receipt (migration v10); safe no-op before migration
-      sb.rpc('set_read',{c:id}).catch(()=>{});
+      // (supabase-js builders are thenable but have no .catch — use then with an error handler)
+      sb.rpc('set_read',{c:id}).then(()=>{},()=>{});
     }catch{}
   },[me.id]);
   useEffect(()=>{if(aid&&live)setReadMark(aid)},[aid,live,setReadMark]);
