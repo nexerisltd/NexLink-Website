@@ -1,22 +1,22 @@
 -- Idempotent full schema: safe to RE-RUN on an existing project to bring it to the latest state.
 -- Fixes partial migrations + flushes the PostgREST schema cache at the end.
--- (Fresh projects can also use this file instead of schema.sql.)
+-- Run the WHOLE file in Supabase SQL Editor (it is one transaction-safe script).
 -- Run the whole file in Supabase SQL Editor.
 create extension if not exists pg_cron;
-create table public.profiles(id uuid primary key references auth.users on delete cascade,
+create table if not exists public.profiles(id uuid primary key references auth.users on delete cascade,
   username text unique not null check(username ~ '^[a-z0-9_]{3,20}$'),
   display_name text not null check(char_length(display_name) between 1 and 40),
   public_key jsonb not null, created_at timestamptz default now());
-create table public.key_backups(user_id uuid primary key references public.profiles on delete cascade, data jsonb not null);
-create table public.chats(id uuid primary key default gen_random_uuid(), kind text not null check(kind in('dm','group')),
+create table if not exists public.key_backups(user_id uuid primary key references public.profiles on delete cascade, data jsonb not null);
+create table if not exists public.chats(id uuid primary key default gen_random_uuid(), kind text not null check(kind in('dm','group')),
   title text, dm_key text unique, ttl_hours int not null default 0, created_by uuid references public.profiles, created_at timestamptz default now());
-create table public.chat_members(chat_id uuid references public.chats on delete cascade, user_id uuid references public.profiles on delete cascade,
+create table if not exists public.chat_members(chat_id uuid references public.chats on delete cascade, user_id uuid references public.profiles on delete cascade,
   is_admin boolean default false, primary key(chat_id,user_id));
-create table public.messages(id uuid primary key default gen_random_uuid(), chat_id uuid not null references public.chats on delete cascade,
+create table if not exists public.messages(id uuid primary key default gen_random_uuid(), chat_id uuid not null references public.chats on delete cascade,
   sender_id uuid not null references public.profiles, iv text not null, ciphertext text not null check(char_length(ciphertext)<20000),
   wraps jsonb not null, created_at timestamptz default now(), expires_at timestamptz);
-create index on public.messages(chat_id,created_at);
-create index on public.messages(expires_at);
+create index if not exists messages_chat_created_idx on public.messages(chat_id,created_at);
+create index if not exists messages_expires_idx on public.messages(expires_at);
 
 create or replace function public.is_member(c uuid) returns boolean language sql stable security definer set search_path=public as
 $$ select exists(select 1 from chat_members where chat_id=c and user_id=auth.uid()) $$;
@@ -62,7 +62,10 @@ drop policy if exists g_sel on public.messages; create policy g_sel on public.me
 drop policy if exists g_ins on public.messages; create policy g_ins on public.messages for insert to authenticated with check(sender_id=auth.uid() and public.is_member(chat_id));
 drop policy if exists g_del on public.messages; create policy g_del on public.messages for delete to authenticated using(sender_id=auth.uid());
 
-alter publication supabase_realtime add table public.messages, public.chat_members;
+do $$ begin
+  if not exists(select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='messages') then alter publication supabase_realtime add table public.messages; end if;
+  if not exists(select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='chat_members') then alter publication supabase_realtime add table public.chat_members; end if;
+end $$;
 select cron.unschedule('purge-expired') where exists(select 1 from cron.job where jobname='purge-expired');
 select cron.schedule('purge-expired','*/15 * * * *','delete from public.messages where expires_at<now()');
 -- Google-only login + temporary guest rooms (1-5 hours). Safe to run on top of the first schema.
