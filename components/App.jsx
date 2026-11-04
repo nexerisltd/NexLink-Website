@@ -326,8 +326,8 @@ function Chat({me,priv,first,startUser,startChannel,notice}){
   },[me.id]);
   useEffect(()=>{if(!me.is_guest)D.linked().then(setDriveOk).catch(()=>{})},[me.id]); // for the smart banner
   const bkBanner=!me.is_guest&&D.configured&&bk.auto&&driveOk===false
-    ?{label:'Reconnect Google so auto-backup can run silently',act:linkDrive,cta:'Reconnect'}
-    :(bk.stale&&bk.auto?{label:'Auto-backup needs a tap',act:backupNow,cta:'Back up'}:null);
+    ?{label:'Reconnect Google so auto-backup can run silently',act:()=>linkDrive(),cta:'Reconnect'}
+    :(bk.stale&&bk.auto?{label:'Auto-backup needs a tap',act:()=>backupNow(),cta:'Back up'}:null);
 
   function removeLocal(id){
     A.del(me.id,id).catch(()=>{});setMsgs(o=>({...o,[id]:(o[id]||[]).filter(x=>x.id!==id)}));
