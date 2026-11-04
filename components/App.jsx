@@ -169,7 +169,7 @@ function Chat({me,priv,first,startUser,startChannel,notice}){
   },[live]);
   // ---- calls (WebRTC, encrypted signaling) ----
   useEffect(()=>{if(priv)K.initCall(me,priv,id=>memR.current[id])},[me.id,priv]);
-  const doCall=video=>{if(cur?.kind==='dm'&&!isSaved(cur))K.startCall(cur,video,nm(me))};
+  const doCall=video=>{if(cur?.kind==='dm'&&!isSaved(cur))K.startCall(cur,video,nm(other(cur,mem,me.id))||'')};
   const headerButtons=cur?.kind==='dm'&&!isSaved(cur)?<>
     <button className="ic" aria-label="Voice call" title="Voice call" onClick={()=>doCall(false)}><Ic d={IC.phone}/></button>
     <button className="ic" aria-label="Video call" title="Video call" onClick={()=>doCall(true)}><Ic d={IC.video}/></button></>:null;

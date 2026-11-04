@@ -239,6 +239,9 @@ code{font-size:17px;line-height:1.8;letter-spacing:.04em;word-spacing:8px;backgr
 .calmin{display:grid;justify-items:center;gap:8px;text-align:center;margin-top:12dvh}
 .calmin .calava{width:110px;height:110px;border-radius:50%;display:grid;place-items:center;font-size:42px;font-weight:800;background:linear-gradient(135deg,#2b7bff,#7c5cff)}
 .remvid{width:min(92vw,560px);max-height:52dvh;border-radius:18px;margin-top:4dvh;object-fit:cover;background:#000}
+.remaudio{position:fixed;width:2px;height:2px;opacity:0;pointer-events:none;left:-10px;top:-10px}
+.calerr{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);z-index:65;display:flex;gap:12px;align-items:center;background:var(--panel);backdrop-filter:blur(20px);border:1px solid #e5484d;padding:10px 14px;border-radius:14px;box-shadow:var(--shadow);max-width:92vw}
+.calerr button{width:auto;padding:4px 14px;font-size:13px}
 .locvid{position:fixed;right:18px;top:18px;width:130px;height:180px;border-radius:14px;object-fit:cover;background:#000;border:2px solid rgba(255,255,255,.35);z-index:2}
 .calbtns{display:flex;gap:18px}
 .calb{width:60px!important;height:60px!important;padding:0!important;border-radius:50%!important;background:rgba(255,255,255,.14)!important;color:#fff!important;display:grid;place-items:center}
