@@ -68,22 +68,28 @@ function VoiceMsg({p}){
   </div>;
 }
 
-// hold = menu, hold+drag = multi-select, swipe = reply (same gestures as before, but state lives here so the list can stay memoized)
+// Unified gesture layer (pointer events + pointer capture — works identically for mouse and touch):
+// hold 500ms = context menu, hold+drag = multi-select, horizontal drag = swipe-to-reply,
+// quick tap handled by the parent (double-tap = reply).
 export const sw={o:null};
-function useSwipe(m,mine,{selecting,idsRef,onMenu,onReply,setSelIds}){
+function useMsgGestures(m,mine,{selecting,idsRef,onMenu,onReply,setSelIds,onTap}){
+  const st=useRef(null);
   return {
-    onTouchStart:e=>{
-      if(selecting){sw.o=null;return}
-      const t=e.touches[0],o=sw.o={x:t.clientX,y:t.clientY,lock:null,d:0,held:false,drag:false};
-      o.timer=setTimeout(()=>{if(o.lock)return;o.held=true;navigator.vibrate?.(15);onMenu(m,o.x,o.y,true)},500);
+    onPointerDown:e=>{
+      if(selecting)return;
+      if(e.pointerType==='mouse'&&e.button!==0)return;
+      const o=st.current={x0:e.clientX,y0:e.clientY,lock:null,d:0,held:false,drag:false,pid:e.pointerId};
+      o.timer=setTimeout(()=>{if(o.lock)return;o.held=true;navigator.vibrate?.(15);onMenu(m,o.x0,o.y0,true)},500);
+      // keep moves/ends flowing to this row even if an overlay appears under the finger
+      try{e.currentTarget.setPointerCapture(e.pointerId)}catch{}
     },
-    onTouchMove:e=>{
-      const o=sw.o;if(!o||o.x==null)return;
-      const t=e.touches[0],dx=t.clientX-o.x,dy=t.clientY-o.y;
+    onPointerMove:e=>{
+      const o=st.current;if(!o||o.pid!==e.pointerId)return;
+      const dx=e.clientX-o.x0,dy=e.clientY-o.y0;
       if(o.held){
         if(!o.drag&&Math.abs(dy)>14){o.drag=true;onMenu(null)}
         if(o.drag){
-          const row=document.elementFromPoint(t.clientX,t.clientY)?.closest('.mrow'),ids=idsRef.current,a=ids.indexOf(m.id),b=row?ids.indexOf(row.dataset.mid):-1;
+          const row=document.elementFromPoint(e.clientX,e.clientY)?.closest('.mrow'),ids=idsRef.current,a=ids.indexOf(m.id),b=row?ids.indexOf(row.dataset.mid):-1;
           if(a>=0&&b>=0)setSelIds(ids.slice(Math.min(a,b),Math.max(a,b)+1));
         }
         return;
@@ -94,15 +100,16 @@ function useSwipe(m,mine,{selecting,idsRef,onMenu,onReply,setSelIds}){
       o.d=d;row.style.transition='none';row.style.transform=`translateX(${d*dir}px)`;
       const ic=row.querySelector('.swi');if(ic)ic.style.opacity=String(Math.min(1,d/56));
     },
-    onTouchEnd:e=>{
-      const o=sw.o;if(!o||o.x==null)return;
+    onPointerUp:e=>{
+      const o=st.current;if(!o||o.pid!==e.pointerId)return;
       clearTimeout(o.timer);
       const row=e.currentTarget;row.style.transition='transform .2s';row.style.transform='';
       const ic=row.querySelector('.swi');if(ic)ic.style.opacity='0';
       if(o.lock==='x'&&o.d>=56&&!o.held){navigator.vibrate?.(12);onReply(m)}
-      sw.o=null;
+      else if(!o.lock&&!o.held&&!o.drag)onTap(m,e); // plain tap → parent does double-tap detection
+      st.current=null;
     },
-    onTouchCancel:()=>{clearTimeout(sw.o?.timer);sw.o=null}
+    onPointerCancel:()=>{if(st.current){clearTimeout(st.current.timer);st.current=null}}
   };
 }
 
@@ -123,14 +130,14 @@ function PollMsg({m,p,votes,myVote,onVote}){
   </div>;
 }
 
-export const MessageRow=memo(function MessageRow({m,p,mine,sn,avatar,kind,head,newDay,firstNew,text,edited,reactList,myReact,fresh,burst,selected,selecting,held,read,scheduled,myVote,votes,onVote,idsRef,onCtx,onPointerDown,onRowClick,onDbl,onMenu,onReply,openProfile,onReact,hoverPick,hoverLeave,setSelIds}){
-  const swipe=useSwipe(m,mine,{selecting,idsRef,onMenu,onReply,setSelIds});
+export const MessageRow=memo(function MessageRow({m,p,mine,sn,avatar,kind,head,newDay,firstNew,text,edited,reactList,myReact,fresh,burst,selected,selecting,held,read,scheduled,myVote,votes,onVote,idsRef,onCtx,onPointerDown,onRowClick,onTap,onMenu,onReply,openProfile,onReact,hoverPick,hoverLeave,setSelIds}){
+  const swipe=useMsgGestures(m,mine,{selecting,idsRef,onMenu,onReply,setSelIds,onTap});
   return <>
     {newDay&&<div className="day">{new Date(m.created_at).toLocaleDateString([],{weekday:'long',day:'numeric',month:'short'})}</div>}
     {firstNew&&<div className="newdiv"><span>New messages</span></div>}
     <div className={'mrow'+(mine?' mine':'')+(selected?' picked':'')} data-mid={m.id} onClick={()=>onRowClick(m)} {...swipe}>{selecting&&<span className={'chk'+(selected?' on':'')} aria-hidden="true"/>}<span className="swi" aria-hidden="true"><Ic d={IC.reply} s={16}/></span>
       {!mine&&(head?<button className="avb" onClick={e=>{if(!selecting){e.stopPropagation();openProfile(m)}}} aria-label={'Open '+sn+' profile'}><Av n={sn} src={avatar}/></button>:<span className="avs"/>)}
-      <div id={'m-'+m.id} className={'b'+(mine?' me':'')+(head?' first':'')+(m.pending?' pending':'')+(held?' held':'')} onContextMenu={e=>{e.preventDefault();onCtx(m,e.clientX,e.clientY)}} onPointerDown={e=>onPointerDown(e)} onDoubleClick={e=>onDbl(m)}>
+      <div id={'m-'+m.id} className={'b'+(mine?' me':'')+(head?' first':'')+(m.pending?' pending':'')+(held?' held':'')} onContextMenu={e=>{e.preventDefault();onCtx(m,e.clientX,e.clientY)}} onPointerDown={e=>onPointerDown(e)}>
         {kind!=='dm'&&!mine&&head&&<i className="who" onClick={e=>{if(!selecting){e.stopPropagation();openProfile(m)}}} style={{color:`hsl(${hue(m.sender_id)} 75% 45%)`}}>{sn}</i>}
         {p?.fwd&&<small className="fwdl">↪ Forwarded</small>}
         {p?.re&&<div className="quote" onClick={()=>window.dispatchEvent(new CustomEvent('nl-jump',{detail:p.re.id}))}><b>{p.re.n}</b><span>{p.re.t}</span></div>}

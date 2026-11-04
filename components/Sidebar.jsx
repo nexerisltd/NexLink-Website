@@ -11,7 +11,7 @@ function ChatRow({c,meId,mem,last,unread,aid,open,pins,muted,nowMin,typing}){
   const l=last;
   const tp=typing?.[c.id];
   const prev=()=>{if(tp)return <i className="typing">{tp==='me'?'typing…':tp+' is typing…'}</i>;
-    if(!l)return c.kind==='temp'?`Temp room · ${left(new Date(c.expires_at)-nowMin*60000)}`:'No messages yet';return (l.from===meId?'You: ':'')+(l.p?(l.p.t==='file'?'📎 '+l.p.name:l.p.t==='react'?'Reacted '+l.p.e:l.p.t==='voice'?'🎤 Voice message':l.p.t==='sticker'?l.p.e+' Sticker':l.p.t==='poll'?'📊 '+(l.p.q||'Poll'):l.p.t==='loc'?'📍 Location':l.p.t==='hreq'?'Requested chat history':l.p.t==='hgrant'?'Shared chat history':l.p.text):'🔒 Encrypted message')};
+    if(!l)return c.kind==='temp'?`Temp room · ${left(new Date(c.expires_at)-nowMin*60000)}`:'No messages yet';return (l.from===meId?'You: ':'')+(l.p?(l.p.t==='file'?'📎 '+l.p.name:l.p.t==='react'?'Reacted '+l.p.e:l.p.t==='voice'?'🎤 Voice message':l.p.t==='sticker'?l.p.e+' Sticker':l.p.t==='poll'?'📊 '+(l.p.q||'Poll'):l.p.t==='loc'?'📍 Location':l.p.t==='missed'?(l.p.video?'🎥 Missed video call':'📞 Missed voice call'):l.p.t==='calllog'?`📞 ${l.p.video?'Video':'Voice'} call`:l.p.t==='hreq'?'Requested chat history':l.p.t==='hgrant'?'Shared chat history':l.p.text):'🔒 Encrypted message')};
   return <div className={'row'+(c.id===aid?' on':'')} tabIndex={0} role="button" onKeyDown={e=>e.key==='Enter'&&open(c.id)} onClick={()=>open(c.id)}>
     {isSaved(c)?<div className="av savedav"><Ic d={IC.bookmark} s={18}/></div>:<AvM n={t} src={p2}/>}
     <div className="grow"><div className="r1"><b>{t}</b><time>{pins.includes(c.id)?'📌 ':''}{muted.includes(c.id)?'🔕 ':''}{l?ago(l.at):''}</time></div>
@@ -19,7 +19,7 @@ function ChatRow({c,meId,mem,last,unread,aid,open,pins,muted,nowMin,typing}){
 }
 const ChatRowM=memo(ChatRow);
 
-export default function Sidebar({me,chats,mem,last,unread,loaded,bk,live,nowMin,open,dm,setModal,backupNow,toggleTheme,signOut,aid,tab,setTab,pins,muted,extraTab,onTab,typing,openSaved,arch,onArchive,onOpenMsg}){
+export default function Sidebar({me,chats,mem,last,unread,loaded,bk,live,nowMin,open,dm,setModal,backupNow,toggleTheme,signOut,aid,tab,setTab,pins,muted,extraTab,onTab,typing,openSaved,arch,onArchive,onOpenMsg,banner}){
   const [q,setQ]=useState(''),[hits,setHits]=useState([]),[msgHits,setMsgHits]=useState([]),[showArch,setShowArch]=useState(false);
   const searchR=useRef(null);
   // global search: chats by title, people by username, messages by device-local plaintext index (Ctrl+K focuses)
@@ -57,7 +57,7 @@ export default function Sidebar({me,chats,mem,last,unread,loaded,bk,live,nowMin,
         <Menu label="Menu" items={[{t:'Settings',i:IC.sliders,f:()=>setModal('s')},{t:'Switch theme',i:IC.moon,f:toggleTheme},{t:'Sign out',i:IC.out,danger:true,f:signOut}]}/></header>
       <input ref={searchR} className="search" placeholder={me.is_guest?'Search chats':'Search chats, messages, people'} value={q} onChange={e=>setQ(e.target.value)} aria-label="Search"/>
       <div className="chips">{[['all','All'],['dm','Direct'],['group','Groups'],['unread','Unread']].map(([k,l])=><button key={k} className={'chip'+(tab===k?' on':'')} onClick={()=>setTab(k)}>{l}</button>)}</div>
-      {bk.stale&&bk.auto&&<div className="banner">Auto-backup needs a tap<button onClick={backupNow}>Back up</button></div>}
+      {banner&&<div className="banner">{banner.label}<button onClick={banner.act}>{banner.cta}</button></div>}
       <div className="list">
         {hits.length>0&&<><p className="mute pad">People</p>{hits.map(h=><div key={h.id} className="row" onClick={()=>dm(h)}><Av n={h.display_name} src={h.avatar}/><div className="grow"><b>{h.display_name}</b><span>@{h.username}</span></div></div>)}</>}
         {msgHits.length>0&&<><p className="mute pad">Messages</p>{msgHits.map(h=>{

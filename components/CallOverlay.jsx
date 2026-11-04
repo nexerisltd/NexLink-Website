@@ -1,7 +1,7 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
 import * as K from '../lib/calls';
-import {IC,Ic} from './ui';
+import {Av,IC,Ic} from './ui';
 
 // Full-screen call overlay driven by lib/calls.js state (WebRTC, encrypted signaling).
 // The remote media element is ALWAYS mounted — a voice call still needs to play audio.
@@ -20,18 +20,20 @@ export default function CallOverlay(){
   if(st.phase==='idle')return null;
   const dur=st.dur?`${Math.floor(st.dur/60)}:${String(st.dur%60).padStart(2,'0')}`:'';
   const active=st.phase==='active';
-  return <div className={'callov'+(st.video&&active?' vid':'')}>
+  const showVid=(st.video||st.remoteVideo)&&active;
+  const ringing=st.phase==='ringing-in'||st.phase==='ringing-out';
+  return <div className={'callov'+(showVid?' vid':'')+(ringing?' ring':'')}>
     {/* remote stream: visible in video calls, invisible (but playing) in voice calls */}
-    <video ref={remoteV} autoPlay playsInline className={st.video&&active?'remvid':'remaudio'}/>
+    <video ref={remoteV} autoPlay playsInline className={showVid?'remvid':'remaudio'}/>
     <div className="calmin">
-      <div className="calava">{st.peer?.[0]?.toUpperCase()||'?'}</div>
+      <div className="calavaw"><Av n={st.peer} src={st.peerAv}/></div>
       <b>{st.peer}</b>
       <span className="mute">{st.phase==='ringing-out'?'Calling…':st.phase==='ringing-in'?'Incoming call…':st.phase==='connecting'?'Connecting…':dur}</span>
       {st.error&&<span className="err">{st.error}</span>}
       {active&&!st.mic&&<span className="calbadge">🎤 No mic — listen only<button className="caladd" onClick={()=>K.enableMic()}>Add mic</button></span>}
-      {st.video&&active&&!st.cam&&<span className="calbadge">📷 No camera<button className="caladd" onClick={()=>K.enableCam()}>Add camera</button></span>}
+      {active&&!st.cam&&<span className="calbadge">📷 No camera<button className="caladd" onClick={()=>K.enableCam()}>Add camera</button></span>}
     </div>
-    {(st.cam||active)&&(st.video||st.cam)&&<video ref={localV} autoPlay playsInline muted className="locvid"/>}
+    {st.cam&&active&&<video ref={localV} autoPlay playsInline muted className="locvid"/>}
     <div className="calbtns">
       {st.phase==='ringing-in'?<>
         <button className="calb decline" aria-label="Decline" onClick={()=>K.declineCall()}><Ic d={IC.phoneOff}/></button>

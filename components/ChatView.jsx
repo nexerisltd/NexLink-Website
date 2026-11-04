@@ -28,11 +28,15 @@ export default function ChatView(props){
   useEffect(()=>{const f=e=>{if(e.key==='Escape'){setMenu(null);setRxp(null);setFind(null)}};window.addEventListener('keydown',f);return()=>window.removeEventListener('keydown',f)},[]);
   // keep the touchmove blocker for held menus
   useEffect(()=>{const b=boxR.current;if(!b)return;const f=e=>{if(sw.o?.held)e.preventDefault()};b.addEventListener('touchmove',f,{passive:false});return()=>b.removeEventListener('touchmove',f)},[cur?.id]);
-  // autscroll: near bottom, own last message, or chat switch
+  // autscroll: anchor to the newest message on chat switch (only once content exists),
+  // then follow when near the bottom or when the user sends
   useEffect(()=>{
     const b=boxR.current;if(!b||!cur)return;
-    const near=b.scrollHeight-b.scrollTop-b.clientHeight<160,mine=(msgs||[]).slice(-1)[0]?.sender_id===me.id;
-    if(near||mine||b.dataset.chat!==cur.id){endR.current?.scrollIntoView({block:'end'});b.dataset.chat=cur.id}
+    const list=msgs||[];
+    if(!list.length)return;
+    if(b.dataset.chat!==cur.id){endR.current?.scrollIntoView({block:'end'});b.dataset.chat=cur.id;return}
+    const near=b.scrollHeight-b.scrollTop-b.clientHeight<160,mine=list.slice(-1)[0]?.sender_id===me.id;
+    if(near||mine)endR.current?.scrollIntoView({block:'end'});
   },[msgs,cur?.id,me.id]);
   const openMenu=(m,x,y,touch)=>{
     if(!m)return setMenu(null);
@@ -50,6 +54,15 @@ export default function ChatView(props){
     setMenu({m,x,y});
   };
   const onDbl=m=>{if(ptr.t!=='mouse')return;window.getSelection()?.removeAllRanges();doReply(m)};
+  // unified double-tap (mouse + touch) → reply; mobile browsers fire dblclick unreliably
+  const lastTap=useRef({t:0,id:null});
+  const onTap=m=>{
+    const now2=Date.now();
+    if(lastTap.current.id===m.id&&now2-lastTap.current.t<350){
+      lastTap.current={t:0,id:null};
+      if(!selecting){window.getSelection()?.removeAllRanges();doReply(m);navigator.vibrate?.(10)}
+    }else lastTap.current={t:now2,id:m.id};
+  };
   const onRowClick=m=>{if(dragMoved.current)return;if(selIds.length>0||selMode)togglePick(m.id)};
   const onPointerDown=e=>{ptr.t=e.pointerType};
   // PC: drag on empty chat space to select rows
@@ -132,6 +145,11 @@ export default function ChatView(props){
         {!shown.length&&<p className="mute" style={{margin:'auto'}}>No messages yet. Say hello.</p>}
         {shown.map((m,i)=>{const pv=shown[i-1],d=new Date(m.created_at),head=!pv||pv.sender_id!==m.sender_id||d-new Date(pv.created_at)>300000,newDay=!pv||new Date(pv.created_at).toDateString()!==d.toDateString(),mine=m.sender_id===meId,sp=(mem[cur.id]||[]).find(p=>p.id===m.sender_id),sn=nm(sp),firstNew=readAt>0&&!mine&&d>readAt&&(!pv||new Date(pv.created_at)<=readAt);
           if(m.p?.t==='hreq'||m.p?.t==='hgrant')return <div key={m.id} className="sysmsg">{m.p.t==='hreq'?(mine?'You asked for the chat history.':<>{sn} asked for the chat history from before they cleared this chat. <button onClick={()=>{setGrantFor({u:m.sender_id,name:sn});setSelMode(true);setSelIds([]);flash('Select the first and last message you want to share')}}>Share…</button></>):<>{sn} shared chat history with {m.p.to===meId?'you':nm((mem[cur.id]||[]).find(p=>p.id===m.p.to))}.</>}</div>;
+          if(m.p?.t==='missed'||m.p?.t==='calllog'){
+            const mm2=Math.floor((m.p.dur||0)/60),ss2=String((m.p.dur||0)%60).padStart(2,'0');
+            const label=m.p.t==='missed'?`${m.p.video?'🎥 Missed video call':'📞 Missed voice call'}`:`${m.p.video?'🎥':'📞'} ${m.p.video?'Video':'Voice'} call · ${mm2}:${ss2}`;
+            return <div key={m.id} className={'sysmsg'+(m.p.t==='missed'?' missed':'')}>{label}{mine?'':` · ${sn}`}<time>{d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</time></div>;
+          }
           const rl=reactsAgg[m.id]?Object.entries(Object.values(reactsAgg[m.id]).reduce((a,e)=>(a[e]=(a[e]||0)+1,a),{})):null;
           const myE=reactsAgg[m.id]?.[meId];
           const schedAt=m.deliver_at&&new Date(m.deliver_at)>Date.now()?new Date(m.deliver_at).toLocaleString([],{day:'short',month:'short',hour:'2-digit',minute:'2-digit'}):null;
@@ -142,7 +160,7 @@ export default function ChatView(props){
             read={mine&&!m.pending&&!schedAt&&othersMin!==Infinity&&othersMin>=d.getTime()}
             scheduled={schedAt} votes={pvotes} myVote={pvotes?.[meId]?.idx} onVote={props.onVote}
             selected={selIds.includes(m.id)} selecting={selecting} held={menu?.m.id===m.id} idsRef={idsRef}
-            onCtx={onCtx} onPointerDown={onPointerDown} onRowClick={onRowClick} onDbl={onDbl} onMenu={openMenu}
+            onCtx={onCtx} onPointerDown={onPointerDown} onRowClick={onRowClick} onTap={onTap} onMenu={openMenu}
             onReply={doReply} openProfile={openProfile} onReact={react} hoverPick={hoverPick} hoverLeave={hoverLeave} setSelIds={setSelIds}/>;})}
         <div ref={endR}/>
       </div>

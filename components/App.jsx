@@ -70,7 +70,7 @@ function Chat({me,priv,first,startUser,startChannel,notice}){
   const cur=chats.find(c=>c.id===aid&&(!c.expires_at||new Date(c.expires_at)>Date.now()));
   const amAdmin=!!cur&&(mem[cur.id]||[]).some(p=>p.id===me.id&&p.is_admin);
   const gcount=(grants[aid]||[]).length;
-  const snip=m=>m.p?(m.p.t==='file'?'📎 '+m.p.name:m.p.t==='voice'?'🎤 Voice message':m.p.text).slice(0,80):'Encrypted message';
+  const snip=m=>m.p?(m.p.t==='file'?'📎 '+m.p.name:m.p.t==='voice'?'🎤 Voice message':m.p.t==='missed'?(m.p.video?'🎥 Missed video call':'📞 Missed voice call'):m.p.t==='calllog'?`📞 ${m.p.video?'Video':'Voice'} call`:m.p.text).slice(0,80):'Encrypted message';
 
   const dec=useCallback(async m=>{
     if(!plain.current.has(m.id)){let p=null;
@@ -110,7 +110,12 @@ function Chat({me,priv,first,startUser,startChannel,notice}){
         setMsgs(o=>o[m.chat_id]?{...o,[m.chat_id]:[...o[m.chat_id].filter(y=>y.id!==m.id),x]}:o);
         if(m.sender_id!==me.id&&x.p?.t!=='react'&&(m.chat_id!==aidR.current||document.hidden)){
           setUn(u=>({...u,[m.chat_id]:(u[m.chat_id]||0)+1}));
-          if(document.hidden&&LS('nl-push:'+me.id)!=='1'&&!mutedR.current.includes(m.chat_id)&&'Notification' in window&&Notification.permission==='granted')new Notification('NexLink.Chat',{body:'New encrypted message',icon:'/icon-192.png'});
+          if(document.hidden&&LS('nl-push:'+me.id)!=='1'&&!mutedR.current.includes(m.chat_id)&&'Notification' in window&&Notification.permission==='granted'){
+            const c0=chatsR.current.find(c=>c.id===m.chat_id);
+            const sn2=nm((memR.current[m.chat_id]||[]).find(p=>p.id===m.sender_id));
+            const who=c0?.kind==='group'?`${sn2} · ${c0.title||'Group'}`:sn2;
+            new Notification('NexLink.Chat',{body:`${who}: ${m.p?.text?m.p.text.slice(0,60):'new encrypted message'}`,icon:'/icon-192.png',tag:m.chat_id});
+          }
         }
         // clear the sender's typing indicator and mark visible messages as read
         if(x.p?.t!=='react'&&x.p?.t!=='edit'){
@@ -169,7 +174,19 @@ function Chat({me,priv,first,startUser,startChannel,notice}){
   },[live]);
   // ---- calls (WebRTC, encrypted signaling) ----
   useEffect(()=>{if(priv)K.initCall(me,priv,id=>memR.current[id])},[me.id,priv]);
-  const doCall=video=>{if(cur?.kind==='dm'&&!isSaved(cur))K.startCall(cur,video,nm(me),nm(other(cur,mem,me.id))||'')};
+  // call traces: only the caller posts, so both devices never duplicate the log
+  useEffect(()=>K.onCallEvent(ev=>{
+    const chat=chatsR.current.find(c=>c.id===ev.chatId);if(!chat)return;
+    if(ev.type==='missed')post({t:'missed',video:!!ev.video},null,chat).catch(()=>{});
+    else if(ev.type==='calllog')post({t:'calllog',video:!!ev.video,dur:ev.dur||0},null,chat).catch(()=>{});
+  }),[]);
+  const doCall=video=>{
+    if(cur?.kind!=='dm'||isSaved(cur))return;
+    const o=other(cur,mem,me.id);
+    K.startCall(cur,video,nm(me),me.avatar,nm(o)||'',o?.avatar||null);
+    // ring the other device even when the tab is closed (web push)
+    api('/api/push',{chatId:cur.id,call:true,video}).catch(()=>{});
+  };
   const headerButtons=cur?.kind==='dm'&&!isSaved(cur)?<>
     <button className="ic" aria-label="Voice call" title="Voice call" onClick={()=>doCall(false)}><Ic d={IC.phone}/></button>
     <button className="ic" aria-label="Video call" title="Video call" onClick={()=>doCall(true)}><Ic d={IC.video}/></button></>:null;
@@ -296,9 +313,21 @@ function Chat({me,priv,first,startUser,startChannel,notice}){
   }
   useEffect(()=>{
     if(me.is_guest||!D.configured)return;
-    const run=async()=>{if(LS('nl-auto:'+me.id)!=='1'||Date.now()-(+LS('nl-last:'+me.id)||0)<864e5)return;try{await pushBackup(await D.token(true))}catch{upd({stale:true})}};
+    // auto-backup must NEVER open Google UIs: silent server-minted token only.
+    // On failure back off 12h and surface the banner instead of retrying every hour.
+    const run=async()=>{
+      if(LS('nl-auto:'+me.id)!=='1'||Date.now()-(+LS('nl-last:'+me.id)||0)<864e5)return;
+      if(Date.now()-(+LS('nl-bk-fail:'+me.id)||0)<12*36e5)return;
+      const tok=await D.serverToken();
+      if(!tok){LS('nl-bk-fail:'+me.id,String(Date.now()));upd({stale:true});return}
+      try{await pushBackup(tok)}catch{LS('nl-bk-fail:'+me.id,String(Date.now()));upd({stale:true})}
+    };
     const t0=setTimeout(run,6000),iv=setInterval(run,36e5);return()=>{clearTimeout(t0);clearInterval(iv)};
   },[me.id]);
+  useEffect(()=>{if(!me.is_guest)D.linked().then(setDriveOk).catch(()=>{})},[me.id]); // for the smart banner
+  const bkBanner=!me.is_guest&&D.configured&&bk.auto&&driveOk===false
+    ?{label:'Reconnect Google so auto-backup can run silently',act:linkDrive,cta:'Reconnect'}
+    :(bk.stale&&bk.auto?{label:'Auto-backup needs a tap',act:backupNow,cta:'Back up'}:null);
 
   function removeLocal(id){
     A.del(me.id,id).catch(()=>{});setMsgs(o=>({...o,[id]:(o[id]||[]).filter(x=>x.id!==id)}));
@@ -345,6 +374,26 @@ function Chat({me,priv,first,startUser,startChannel,notice}){
     try{const sub=await (await navigator.serviceWorker.ready).pushManager.getSubscription();if(sub){await sb.from('push_subs').delete().eq('endpoint',sub.endpoint);await sub.unsubscribe()}}catch{}
     LS('nl-push:'+me.id,null);setPushOn(false);
   }
+  // Notifications should just work: subscribe silently on load when permission is already
+  // granted, or ask once on the first sent message (a user gesture). No Settings hunt needed.
+  const maybeAutoPush=useCallback(async ask=>{
+    if(me.is_guest||LS('nl-push-asked:'+me.id)==='1')return;
+    try{
+      if(!('serviceWorker' in navigator)||!('PushManager' in window))return;
+      const key=process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;if(!key)return;
+      // silent path (page load): only proceed if permission was already granted;
+      // ask path (first sent message): request permission inside the gesture
+      if(Notification.permission==='granted'){}
+      else if(ask&&await Notification.requestPermission()==='granted'){}
+      else return;
+      const reg=await navigator.serviceWorker.ready;
+      const sub=(await reg.pushManager.getSubscription())||await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlB64(key)});
+      const {error}=await sb.from('push_subs').upsert({user_id:me.id,endpoint:sub.endpoint,sub:sub.toJSON(),muted},{onConflict:'endpoint'});
+      if(error&&!/duplicate/i.test(error.message||''))throw error;
+      LS('nl-push:'+me.id,'1');LS('nl-push-asked:'+me.id,'1');setPushOn(true);
+    }catch{}
+  },[me.id]);
+  useEffect(()=>{if(typeof Notification!=='undefined'&&Notification.permission==='granted')maybeAutoPush(false)},[maybeAutoPush]);
   function doReply(m){
     if(!cur||m.pending||(cur.kind==='temp'&&!keyed))return;
     const sp=(mem[cur.id]||[]).find(p=>p.id===m.sender_id);
@@ -468,7 +517,12 @@ function Chat({me,priv,first,startUser,startChannel,notice}){
     if(!cur)return;const t=text.trim();if(!t)return;
     P.stopTyping(cur.id,me.id);
     if('Notification' in window&&Notification.permission==='default')Notification.requestPermission();
-    const re=replyTo,ed0=editing;try{await post(ed0?{t:'edit',to:ed0.id,text:t}:re?{text:t,re}:{text:t});setReplyTo(null);setEditing(null)}catch(x){flash(x.message);throw x}
+    const re=replyTo,ed0=editing;
+    try{
+      await post(ed0?{t:'edit',to:ed0.id,text:t}:re?{text:t,re}:{text:t});
+      setReplyTo(null);setEditing(null);
+      maybeAutoPush(true); // first message = gesture: turn background notifications on
+    }catch(x){flash(x.message);throw x}
   }
   async function sendFile(f){
     if(!f||!cur)return;
@@ -611,7 +665,7 @@ function Chat({me,priv,first,startUser,startChannel,notice}){
   const chatsWithUnread=chats.filter(c=>!c.expires_at||new Date(c.expires_at)>nowMin*60000);
   return <div className={'app'+(side?' open':'')}>
     <Sidebar me={me} chats={chatsWithUnread} mem={mem} last={last} unread={unread} loaded={loaded} bk={bk} live={live} nowMin={nowMin}
-      open={open} dm={dm} setModal={setModal} backupNow={backupNow} toggleTheme={toggleTheme} signOut={signOut} aid={aid} tab={tab} setTab={setTab} pins={pins} muted={muted} onTab={()=>setSide(true)} typing={typing} openSaved={openSaved} arch={arch} onOpenMsg={onOpenMsg}
+      open={open} dm={dm} setModal={setModal} backupNow={backupNow} toggleTheme={toggleTheme} signOut={signOut} aid={aid} tab={tab} setTab={setTab} pins={pins} muted={muted} onTab={()=>setSide(true)} typing={typing} openSaved={openSaved} arch={arch} onOpenMsg={onOpenMsg} banner={bkBanner}
       extraTab={chats.some(c=>c.kind==='channel')?{k:'channel',l:'Channels',i:IC.globe}:null}/>
     <ChatView me={me} cur={cur} mem={mem} msgs={msgs[aid]} clr={clr} grants={grants} hid={hid} lim={lim} setLim={setLim} readAt={readAt} now={nowMin*60000} ver={ver} keyed={keyed}
       selIds={selIds} selMode={selMode} grantFor={grantFor} setSelIds={setSelIds} setSelMode={setSelMode} setGrantFor={setGrantFor} clearSel={clearSel} togglePick={togglePick}
@@ -719,7 +773,7 @@ function Chat({me,priv,first,startUser,startChannel,notice}){
       <button className="alt" onClick={()=>shareLocation(Date.now()+3600000)}>⏱ Live for 1 hour</button>
       <button className="alt" onClick={()=>shareLocation(Date.now()+8*3600000)}>⏱ Live for 8 hours</button>
       <a onClick={()=>setModal(null)}>Cancel</a></div></div>}
-    {modal==='map'&&mapPoints.length>0&&<div className="modal" onClick={()=>setMapOn(false)}><div className="card" onClick={e=>e.stopPropagation()}>
+    {mapOn&&mapPoints.length>0&&<div className="modal" onClick={()=>setMapOn(false)}><div className="card" onClick={e=>e.stopPropagation()}>
       <b>Shared location{mapPoints.length>1?` · ${mapPoints.length} people`:''}</b>
       <MapView points={mapPoints} meId={me.id}/>
       <button className="alt" onClick={()=>setMapOn(false)}>Close</button></div></div>}

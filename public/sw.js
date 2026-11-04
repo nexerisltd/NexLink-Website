@@ -1,5 +1,5 @@
 // App shell cache (offline start) + push notifications. Never caches /api or other origins.
-const V='nl-v2',SHELL=['/','/logo.png','/icon-192.png','/favicon.png','/manifest.webmanifest'];
+const V='nl-v3',SHELL=['/','/logo.png','/icon-192.png','/favicon.png','/manifest.webmanifest'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(V).then(c=>c.addAll(SHELL).catch(()=>{})));self.skipWaiting()});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==V).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
 self.addEventListener('fetch',e=>{
@@ -17,7 +17,9 @@ self.addEventListener('push',e=>{
   const d=(()=>{try{return e.data.json()}catch{return{}}})();
   e.waitUntil(self.clients.matchAll({type:'window',includeUncontrolled:true}).then(cs=>{
     if(cs.some(c=>c.visibilityState==='visible'))return;
-    return self.registration.showNotification(d.title||'NexLink.Chat',{body:d.body||'New encrypted message',icon:'/icon-192.png',badge:'/favicon.png',tag:d.tag});
+    const isCall=!!d.call||/^call-/.test(d.tag||'');
+    return self.registration.showNotification(d.title||'NexLink.Chat',{body:d.body||'New encrypted message',icon:'/icon-192.png',badge:'/favicon.png',tag:d.tag,
+      requireInteraction:isCall,renotify:isCall,data:{call:isCall}});
   }));
 });
 self.addEventListener('notificationclick',e=>{e.notification.close();e.waitUntil(self.clients.matchAll({type:'window',includeUncontrolled:true}).then(cs=>cs[0]?cs[0].focus():self.clients.openWindow('/')))});
